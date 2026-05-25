@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
@@ -269,6 +269,19 @@ export default function SessionPage() {
     // Just reset — let user try again, don't count as attempt
   }, []);
 
+  const [textInput, setTextInput] = useState("");
+
+  const handleTextSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = textInput.trim();
+      if (!trimmed || state.evaluating) return;
+      setTextInput("");
+      handleTranscript(trimmed);
+    },
+    [textInput, state.evaluating, handleTranscript]
+  );
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const { stage, script, elapsedSec, lastFeedback, attempt } = state;
@@ -388,6 +401,25 @@ export default function SessionPage() {
                 onNoSpeech={handleNoSpeech}
                 disabled={state.evaluating}
               />
+
+              {/* Text input fallback for testing */}
+              <form onSubmit={handleTextSubmit} className="flex w-full gap-2 mt-1">
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  disabled={state.evaluating}
+                  placeholder="Or type your answer here…"
+                  className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-100 disabled:text-gray-400"
+                />
+                <button
+                  type="submit"
+                  disabled={state.evaluating || !textInput.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+                >
+                  Send
+                </button>
+              </form>
             </div>
           )}
 
