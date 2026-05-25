@@ -9,6 +9,7 @@ import SessionSummary from "@/components/SessionSummary";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type { Script, ScriptTurn, TurnResult } from "@/lib/types";
+import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ function reducer(state: State, action: Action): State {
           passed: action.passed,
         };
         const results = [...state.results, result];
-        let next = state.currentScriptIndex + 1;
+        const next = state.currentScriptIndex + 1;
         // Skip any leading coach turns — they'll render via COACH_DONE
         // (actually coach turns render themselves; we just advance index)
         if (next >= turns.length) {
@@ -167,6 +168,8 @@ export default function SessionPage() {
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const summarizingRef = useRef(false);
+  const manualTtsRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const manualTtsFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load script on mount
   useEffect(() => {
@@ -243,7 +246,7 @@ export default function SessionPage() {
   // Evaluate user speech
   const handleTranscript = useCallback(
     async (transcript: string) => {
-      const { script, currentScriptIndex, attempt } = state;
+      const { script, currentScriptIndex } = state;
       if (!script) return;
       const expectedTurn = script.turns[currentScriptIndex];
       if (!expectedTurn || expectedTurn.speaker !== "user") return;
@@ -270,6 +273,100 @@ export default function SessionPage() {
   }, []);
 
   const [textInput, setTextInput] = useState("");
+  const [isTtsPlaying, setIsTtsPlaying] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
+      manualTtsRef.current = null;
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Helper: speak a line via TTS
+  const speakLine = useCallback(async (text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+
+    // Stop anything currently playing
+    if (synth.speaking || synth.pending) synth.cancel();
+    if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
+    setIsTtsPlaying(true);
+
+    const voices = await waitForSpeechVoices();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.85;
+    const enVoice = pickEnglishVoice(voices);
+    if (enVoice) { utterance.voice = enVoice; utterance.lang = enVoice.lang; }
+    console.log("[TTS] speaking with:", enVoice?.name, enVoice?.lang);
+    manualTtsRef.current = utterance;
+    let intentionalCancel = false;
+    let started = false;
+    let fallbackStarted = false;
+    let startFallback: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+      manualTtsRef.current = null;
+      if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
+      manualTtsFallbackRef.current = null;
+      if (startFallback) clearTimeout(startFallback);
+      startFallback = null;
+      setIsTtsPlaying(false);
+    };
+    const playMacFallback = async () => {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
+      intentionalCancel = true;
+      synth.cancel();
+      if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
+      manualTtsFallbackRef.current = null;
+      console.log("[TTS] Web Speech did not start; using macOS say audio");
+      try {
+        await playMacSpeechAudio(text, "Samantha");
+      } catch (error) {
+        console.log("[TTS] macOS audio fallback failed", error);
+      } finally {
+        finish();
+      }
+    };
+    utterance.onstart = () => {
+      started = true;
+      if (startFallback) clearTimeout(startFallback);
+      startFallback = null;
+      console.log("[TTS] onstart");
+    };
+    utterance.onend = finish;
+    utterance.onerror = (e) => {
+      if (intentionalCancel && e.error === "canceled") {
+        return;
+      }
+      if (!started) {
+        void playMacFallback();
+      } else {
+        console.log("[TTS] onerror", e.error);
+        finish();
+      }
+    };
+    const words = text.split(" ").length;
+    const estimatedMs = Math.max(2500, words * 420);
+    startFallback = setTimeout(() => {
+      if (!started) void playMacFallback();
+    }, 1200);
+    manualTtsFallbackRef.current = setTimeout(() => {
+      intentionalCancel = true;
+      synth.cancel();
+      finish();
+    }, estimatedMs + 2000);
+    try {
+      synth.speak(utterance);
+    } catch (error) {
+      console.log("[TTS] speak failed", error);
+      finish();
+    }
+  }, []);
 
   const handleTextSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -377,12 +474,26 @@ export default function SessionPage() {
 
           {isUserTurn && stage === "conversation" && (
             <div className="flex flex-col items-center gap-5 w-full">
-              {/* Reference line */}
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 w-full text-center">
-                <p className="text-xs text-gray-400 mb-1">You can say:</p>
-                <p className="text-gray-800 font-medium leading-relaxed">
-                  {currentTurn.hint ?? currentTurn.text}
-                </p>
+              {/* Reference line with listen button */}
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 w-full">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 text-center">
+                    <p className="text-xs text-gray-400 mb-1">You can say:</p>
+                    <p className="text-gray-800 font-medium leading-relaxed">
+                      {currentTurn.hint ?? currentTurn.text}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => speakLine(currentTurn.hint ?? currentTurn.text)}
+                    disabled={isTtsPlaying}
+                    title="Hear it"
+                    className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
+                  >
+                    {isTtsPlaying ? (
+                      <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+                    ) : "🔊"}
+                  </button>
+                </div>
               </div>
 
               {/* Feedback */}
@@ -402,7 +513,7 @@ export default function SessionPage() {
                 disabled={state.evaluating}
               />
 
-              {/* Text input fallback for testing */}
+              {/* Text input fallback */}
               <form onSubmit={handleTextSubmit} className="flex w-full gap-2 mt-1">
                 <input
                   type="text"

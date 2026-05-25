@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 interface CoachLineProps {
   text: string;
@@ -9,6 +10,7 @@ interface CoachLineProps {
 
 export default function CoachLine({ text, onDone }: CoachLineProps) {
   const doneRef = useRef(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     doneRef.current = false;
@@ -20,32 +22,87 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       return () => clearTimeout(t);
     }
 
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
+    let cancelled = false;
+    let fallback: ReturnType<typeof setTimeout> | null = null;
+    let startFallback: ReturnType<typeof setTimeout> | null = null;
+    let started = false;
+    let fallbackStarted = false;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.95;
-
-    utterance.onend = () => {
-      if (!doneRef.current) { doneRef.current = true; onDone(); }
+    const finish = () => {
+      if (!doneRef.current) {
+        doneRef.current = true;
+        utteranceRef.current = null;
+        onDone();
+      }
     };
-    utterance.onerror = () => {
-      if (!doneRef.current) { doneRef.current = true; onDone(); }
-    };
 
-    // Fallback in case onend never fires (some browsers are unreliable)
-    const words = text.split(" ").length;
-    const estimatedMs = Math.max(3000, words * 450);
-    const fallback = setTimeout(() => {
-      window.speechSynthesis.cancel();
-      if (!doneRef.current) { doneRef.current = true; onDone(); }
-    }, estimatedMs + 2000);
+    async function speak() {
+      const voices = await waitForSpeechVoices();
+      if (cancelled) return;
 
-    window.speechSynthesis.speak(utterance);
+      synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      utterance.rate = 0.95;
+
+      // Chrome loads voices asynchronously; choose after voiceschanged fires.
+      const enVoice = pickEnglishVoice(voices);
+      if (enVoice) {
+        utterance.voice = enVoice;
+        utterance.lang = enVoice.lang;
+      }
+      utteranceRef.current = utterance;
+
+      const playMacFallback = async () => {
+        if (fallbackStarted || cancelled) return;
+        fallbackStarted = true;
+        synth.cancel();
+        if (fallback) clearTimeout(fallback);
+        fallback = null;
+        try {
+          await playMacSpeechAudio(text, "Samantha");
+        } finally {
+          finish();
+        }
+      };
+
+      utterance.onstart = () => {
+        started = true;
+        if (startFallback) clearTimeout(startFallback);
+        startFallback = null;
+      };
+      utterance.onend = finish;
+      utterance.onerror = () => {
+        if (!started) {
+          void playMacFallback();
+        } else {
+          finish();
+        }
+      };
+
+      const words = text.split(" ").length;
+      const estimatedMs = Math.max(3000, words * 450);
+      startFallback = setTimeout(() => {
+        if (!started) void playMacFallback();
+      }, 1200);
+      fallback = setTimeout(() => {
+        synth.cancel();
+        finish();
+      }, estimatedMs + 2000);
+
+      synth.speak(utterance);
+    }
+
+    void speak();
 
     return () => {
-      clearTimeout(fallback);
-      window.speechSynthesis.cancel();
+      cancelled = true;
+      if (fallback) clearTimeout(fallback);
+      if (startFallback) clearTimeout(startFallback);
+      utteranceRef.current = null;
+      synth.cancel();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
