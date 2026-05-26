@@ -27,6 +27,7 @@ interface State {
   evaluating: boolean;
   summary: string;
   lastFeedback: "pass" | "fail" | null;
+  pendingPassAdvance: boolean;
 }
 
 type Action =
@@ -34,6 +35,9 @@ type Action =
   | { type: "START_CONVERSATION" }
   | { type: "COACH_DONE" }
   | { type: "EVAL_RESULT"; passed: boolean; turnIndex: number }
+  | { type: "PASS_HOLD"; turnIndex: number }
+  | { type: "ADVANCE_AFTER_PASS" }
+  | { type: "CLEAR_FEEDBACK" }
   | { type: "EVALUATING"; value: boolean }
   | { type: "TICK" }
   | { type: "SUMMARY_READY"; summary: string }
@@ -86,6 +90,7 @@ const initial: State = {
   evaluating: false,
   summary: "",
   lastFeedback: null,
+  pendingPassAdvance: false,
 };
 
 function reducer(state: State, action: Action): State {
@@ -116,6 +121,41 @@ function reducer(state: State, action: Action): State {
     }
     case "EVALUATING":
       return { ...state, evaluating: action.value };
+    case "PASS_HOLD": {
+      const result: TurnResult = {
+        turnIndex: action.turnIndex,
+        passed: true,
+      };
+      return {
+        ...state,
+        results: [...state.results, result],
+        attempt: 0,
+        evaluating: false,
+        lastFeedback: "pass",
+        pendingPassAdvance: true,
+      };
+    }
+    case "ADVANCE_AFTER_PASS": {
+      if (!state.script) return state;
+      if (!state.pendingPassAdvance) return state;
+      const turns = state.script.turns;
+      const next = state.currentScriptIndex + 1;
+      if (next >= turns.length) {
+        return {
+          ...state,
+          stage: "summarizing",
+          pendingPassAdvance: false,
+        };
+      }
+      return {
+        ...state,
+        currentScriptIndex: next,
+        currentUserTurnPos: state.currentUserTurnPos + 1,
+        pendingPassAdvance: false,
+      };
+    }
+    case "CLEAR_FEEDBACK":
+      return { ...state, lastFeedback: null };
     case "EVAL_RESULT": {
       const turns = state.script!.turns;
       if (action.passed || state.attempt === 1) {
@@ -138,11 +178,12 @@ function reducer(state: State, action: Action): State {
           currentUserTurnPos: state.currentUserTurnPos + 1,
           attempt: 0,
           evaluating: false,
+          pendingPassAdvance: false,
           lastFeedback: action.passed ? "pass" : "fail",
         };
       } else {
         // First attempt failed — allow retry
-        return { ...state, attempt: 1, evaluating: false, lastFeedback: "fail" };
+        return { ...state, attempt: 1, evaluating: false, pendingPassAdvance: false, lastFeedback: "fail" };
       }
     }
     case "TICK": {
@@ -167,9 +208,12 @@ export default function SessionPage() {
   const [state, dispatch] = useReducer(reducer, initial);
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const passAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const passAdvanceCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const summarizingRef = useRef(false);
   const manualTtsRef = useRef<SpeechSynthesisUtterance | null>(null);
   const manualTtsFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [passAdvanceSec, setPassAdvanceSec] = useState<number | null>(null);
 
   // Load script on mount
   useEffect(() => {
@@ -246,6 +290,7 @@ export default function SessionPage() {
   // Evaluate user speech
   const handleTranscript = useCallback(
     async (transcript: string) => {
+      setLastTranscript(transcript);
       const { script, currentScriptIndex } = state;
       if (!script) return;
       const expectedTurn = script.turns[currentScriptIndex];
@@ -259,7 +304,29 @@ export default function SessionPage() {
           body: JSON.stringify({ expected: expectedTurn.text, actual: transcript }),
         });
         const { pass } = await res.json();
-        dispatch({ type: "EVAL_RESULT", passed: pass, turnIndex: currentScriptIndex });
+        if (pass) {
+          dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex });
+          setPassAdvanceSec(2);
+          if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+          if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+          passAdvanceCountdownRef.current = setInterval(() => {
+            setPassAdvanceSec((s) => (s && s > 1 ? s - 1 : 1));
+          }, 1000);
+          passAdvanceTimeoutRef.current = setTimeout(() => {
+            dispatch({ type: "ADVANCE_AFTER_PASS" });
+            if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+            passAdvanceCountdownRef.current = null;
+            setPassAdvanceSec(null);
+          }, 2000);
+          return;
+        }
+
+        setPassAdvanceSec(null);
+        if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+        if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+        passAdvanceTimeoutRef.current = null;
+        passAdvanceCountdownRef.current = null;
+        dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex });
       } catch {
         // Fail-open
         dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
@@ -273,7 +340,18 @@ export default function SessionPage() {
   }, []);
 
   const [textInput, setTextInput] = useState("");
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [isTtsPlaying, setIsTtsPlaying] = useState(false);
+
+  useEffect(() => {
+    setLastTranscript(null);
+    setPassAdvanceSec(null);
+    dispatch({ type: "CLEAR_FEEDBACK" });
+    if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+    passAdvanceTimeoutRef.current = null;
+    if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+    passAdvanceCountdownRef.current = null;
+  }, [state.currentScriptIndex]);
 
   useEffect(() => {
     return () => {
@@ -282,6 +360,8 @@ export default function SessionPage() {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+      if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
     };
   }, []);
 
@@ -372,11 +452,11 @@ export default function SessionPage() {
     (e: React.FormEvent) => {
       e.preventDefault();
       const trimmed = textInput.trim();
-      if (!trimmed || state.evaluating) return;
+      if (!trimmed || state.evaluating || state.pendingPassAdvance) return;
       setTextInput("");
       handleTranscript(trimmed);
     },
-    [textInput, state.evaluating, handleTranscript]
+    [textInput, state.evaluating, state.pendingPassAdvance, handleTranscript]
   );
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -500,7 +580,9 @@ export default function SessionPage() {
               {lastFeedback && (
                 <p className={`text-sm font-medium ${lastFeedback === "pass" ? "text-emerald-600" : "text-amber-600"}`}>
                   {lastFeedback === "pass"
-                    ? "✓ Great!"
+                    ? state.pendingPassAdvance
+                      ? `✓ Great! Next line in ${passAdvanceSec ?? 2}s...`
+                      : "✓ Great!"
                     : attempt === 1
                     ? "Give it another try!"
                     : "Moving on…"}
@@ -510,8 +592,16 @@ export default function SessionPage() {
               <MicButton
                 onResult={handleTranscript}
                 onNoSpeech={handleNoSpeech}
-                disabled={state.evaluating}
+                disabled={state.evaluating || state.pendingPassAdvance}
+                prompt={currentTurn.hint ?? currentTurn.text}
               />
+
+              {lastTranscript && (
+                <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-sm text-blue-800">
+                  <span className="text-xs text-blue-400 mr-1">You said:</span>
+                  {lastTranscript}
+                </div>
+              )}
 
               {/* Text input fallback */}
               <form onSubmit={handleTextSubmit} className="flex w-full gap-2 mt-1">
@@ -519,13 +609,13 @@ export default function SessionPage() {
                   type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
-                  disabled={state.evaluating}
+                  disabled={state.evaluating || state.pendingPassAdvance}
                   placeholder="Or type your answer here…"
                   className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-100 disabled:text-gray-400"
                 />
                 <button
                   type="submit"
-                  disabled={state.evaluating || !textInput.trim()}
+                  disabled={state.evaluating || state.pendingPassAdvance || !textInput.trim()}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
                 >
                   Send

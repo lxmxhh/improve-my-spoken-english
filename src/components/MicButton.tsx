@@ -6,24 +6,26 @@ interface MicButtonProps {
   onResult: (transcript: string) => void;
   onNoSpeech: () => void;
   disabled: boolean;
+  /** Expected line — passed to Whisper as initial_prompt to improve accuracy */
+  prompt?: string;
 }
 
 type MicState = "idle" | "listening" | "processing";
 
 const TIMEOUT_MS = 60_000;
-const NO_SPEECH_MS = 10_000;
+const AUTO_STOP_MS = 10_000; // auto-stop after 10s silence (no manual stop)
 
-export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonProps) {
+export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: MicButtonProps) {
   const [micState, setMicState] = useState<MicState>("idle");
-  const [countdown, setCountdown] = useState(TIMEOUT_MS / 1000);
+  const [countdown, setCountdown] = useState(AUTO_STOP_MS / 1000);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Use a ref to track the real current state — avoids stale closures in event handlers
   const stateRef = useRef<MicState>("idle");
-  const recognitionRef = useRef<InstanceType<typeof window.SpeechRecognition> | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noSpeechRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const gotResultRef = useRef(false);
 
   function setState(s: MicState) {
     stateRef.current = s;
@@ -32,96 +34,135 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
 
   function clearTimers() {
     if (autoStopRef.current) clearTimeout(autoStopRef.current);
-    if (noSpeechRef.current) clearTimeout(noSpeechRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
   }
 
-  function startListening(e: React.PointerEvent) {
-    e.preventDefault(); // prevent any synthetic click from re-triggering
-    if (disabled || stateRef.current !== "idle") return;
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
 
-    const SpeechRecognition =
-      (window as Window).SpeechRecognition ?? (window as Window).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognitionRef.current = recognition;
-    gotResultRef.current = false;
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? "";
-      gotResultRef.current = true;
-      clearTimers();
-      setState("processing");
-      onResult(transcript);
-    };
-
-    recognition.onend = () => {
-      if (!gotResultRef.current) {
-        clearTimers();
+  async function sendAudio(chunks: Blob[], mimeType: string) {
+    setState("processing");
+    try {
+      const blob = new Blob(chunks, { type: mimeType });
+      console.log("[STT] sending audio, size:", blob.size, "type:", mimeType);
+      const form = new FormData();
+      form.append("audio", blob, "speech.webm");
+      if (prompt) form.append("prompt", prompt);
+      const res = await fetch("/api/transcribe", { method: "POST", body: form });
+      const data = await res.json() as { transcript?: string; error?: string };
+      if (!res.ok || !data.transcript?.trim()) {
+        console.warn("[STT] no transcript:", data);
         setState("idle");
-        setCountdown(TIMEOUT_MS / 1000);
+        setErrorMsg("No speech recognized — please try again.");
         onNoSpeech();
+      } else {
+        console.log("[STT] transcript:", data.transcript);
+        setState("processing");
+        onResult(data.transcript.trim());
       }
-    };
-
-    recognition.onerror = () => {
-      clearTimers();
+    } catch (err) {
+      console.error("[STT] transcribe error:", err);
       setState("idle");
-      setCountdown(TIMEOUT_MS / 1000);
+      setErrorMsg("Transcription failed — please try again.");
       onNoSpeech();
-    };
+    }
+  }
 
-    recognition.start();
-    setState("listening");
-    setCountdown(TIMEOUT_MS / 1000);
+  async function toggleListening() {
+    setErrorMsg(null);
+    if (disabled) return;
 
-    // 60-second hard stop
-    autoStopRef.current = setTimeout(() => {
-      recognitionRef.current?.stop();
-    }, TIMEOUT_MS);
+    // Second click: stop recording
+    if (stateRef.current === "listening") {
+      clearTimers();
+      mediaRecorderRef.current?.stop(); // triggers onstop → sendAudio
+      return;
+    }
 
-    // 10-second silence detection
-    noSpeechRef.current = setTimeout(() => {
-      if (!gotResultRef.current) {
-        recognitionRef.current?.stop();
+    if (stateRef.current !== "idle") return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        stopStream();
+        const chunks = chunksRef.current;
+        const type = recorder.mimeType || "audio/webm";
+        if (chunks.length === 0 || chunks.reduce((s, b) => s + b.size, 0) < 1000) {
+          setState("idle");
+          setErrorMsg("Recording was too short — please try again.");
+          onNoSpeech();
+          return;
+        }
+        void sendAudio(chunks, type);
+      };
+
+      recorder.start(250); // collect chunks every 250ms
+      setState("listening");
+      setCountdown(AUTO_STOP_MS / 1000);
+
+      // Auto-stop after AUTO_STOP_MS
+      autoStopRef.current = setTimeout(() => {
+        if (stateRef.current === "listening") {
+          clearTimers();
+          mediaRecorderRef.current?.stop();
+        }
+      }, AUTO_STOP_MS);
+
+      // Countdown
+      countdownRef.current = setInterval(() => {
+        setCountdown((c) => Math.max(0, c - 1));
+      }, 1000);
+
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : "";
+      console.error("[STT] getUserMedia failed:", err);
+      if (name === "NotAllowedError") {
+        setErrorMsg("Microphone permission denied. Please allow access and try again.");
+      } else {
+        setErrorMsg(`Microphone error: ${name || "unknown"}`);
       }
-    }, NO_SPEECH_MS);
-
-    // Countdown display
-    countdownRef.current = setInterval(() => {
-      setCountdown((c) => Math.max(0, c - 1));
-    }, 1000);
+    }
   }
 
-  function stopListening(e: React.PointerEvent) {
-    e.preventDefault();
-    if (stateRef.current !== "listening") return;
-    recognitionRef.current?.stop();
-    // onend will fire and clean up
-  }
-
-  // Reset to idle when parent clears the disabled flag after evaluation
   useEffect(() => {
     if (!disabled && stateRef.current === "processing") {
       setState("idle");
-      setCountdown(TIMEOUT_MS / 1000);
+      setCountdown(AUTO_STOP_MS / 1000);
     }
   }, [disabled]);
 
-  useEffect(() => () => clearTimers(), []);
+  useEffect(() => () => {
+    clearTimers();
+    stopStream();
+  }, []);
 
   const isListening = micState === "listening";
   const isProcessing = micState === "processing";
 
   return (
     <div className="flex flex-col items-center gap-2">
+      {errorMsg && (
+        <p className="text-xs text-red-500 text-center max-w-xs">{errorMsg}</p>
+      )}
       <button
-        onPointerDown={startListening}
-        onPointerUp={stopListening}
+        onClick={toggleListening}
         disabled={disabled || isProcessing}
         aria-label={isListening ? "Stop recording" : "Start recording"}
         className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400 select-none touch-none ${
@@ -154,7 +195,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
           <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div
               className="bg-red-500 h-1.5 rounded-full transition-all duration-1000"
-              style={{ width: `${(countdown / (TIMEOUT_MS / 1000)) * 100}%` }}
+              style={{ width: `${(countdown / (AUTO_STOP_MS / 1000)) * 100}%` }}
             />
           </div>
           <span className="text-xs text-gray-500">{countdown}s remaining</span>
@@ -162,7 +203,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
       )}
 
       <p className="text-xs text-gray-400">
-        {isListening ? "Listening… release to submit" : isProcessing ? "Checking…" : "Tap to speak"}
+        {isListening ? "Listening… click to stop" : isProcessing ? "Transcribing…" : "Click to speak"}
       </p>
     </div>
   );

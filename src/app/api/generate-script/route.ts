@@ -3,6 +3,8 @@ import { openrouter, MODEL } from "@/lib/ai";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import type { Script } from "@/lib/types";
 
+const GENERATE_TIMEOUT_MS = 12_000;
+
 const CATEGORIES = [
   "Daily Life",
   "Work & Career",
@@ -20,7 +22,7 @@ export async function POST(req: NextRequest) {
     : `Generate a natural spoken English conversation between an encouraging coach named Alex and a B1-B2 level English learner. Choose an interesting topic within the category: "${resolvedCategory}".`;
 
   try {
-    const completion = await openrouter.chat.completions.create({
+    const completionPromise = openrouter.chat.completions.create({
       model: MODEL,
       response_format: { type: "json_object" },
       messages: [
@@ -50,6 +52,12 @@ The "hint" field on user turns must be identical to "text".`,
       ],
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("generate-script timeout")), GENERATE_TIMEOUT_MS);
+    });
+
+    const completion = await Promise.race([completionPromise, timeoutPromise]);
+
     const raw = completion.choices[0]?.message?.content ?? "";
     const script: Script = JSON.parse(raw);
 
@@ -63,7 +71,8 @@ The "hint" field on user turns must be identical to "text".`,
     }
 
     return NextResponse.json(script);
-  } catch {
+  } catch (error) {
+    console.warn("[generate-script] fallback due to:", error instanceof Error ? error.message : error);
     // Fall back to a hardcoded script for the requested category
     const fallback =
       FALLBACK_SCRIPTS.find((s) => s.category === resolvedCategory) ??
