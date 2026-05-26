@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openrouter, MODEL } from "@/lib/ai";
+import { ai, AI_MODEL, hasAiApiKey } from "@/lib/ai";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import type { Script } from "@/lib/types";
 
-const GENERATE_TIMEOUT_MS = 12_000;
+const GENERATE_TIMEOUT_MS =
+  Number(process.env.GENERATE_SCRIPT_TIMEOUT_MS) || 25_000;
 
 const CATEGORIES = [
   "Daily Life",
@@ -22,8 +23,12 @@ export async function POST(req: NextRequest) {
     : `Generate a natural spoken English conversation between an encouraging coach named Alex and a B1-B2 level English learner. Choose an interesting topic within the category: "${resolvedCategory}".`;
 
   try {
-    const completionPromise = openrouter.chat.completions.create({
-      model: MODEL,
+    if (!hasAiApiKey) {
+      throw new Error("AI_API_KEY is not configured");
+    }
+
+    const completionPromise = ai.chat.completions.create({
+      model: AI_MODEL,
       response_format: { type: "json_object" },
       messages: [
         {

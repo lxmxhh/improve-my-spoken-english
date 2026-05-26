@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openrouter, MODEL } from "@/lib/ai";
+import { ai, AI_MODEL, hasAiApiKey } from "@/lib/ai";
 import type { Script } from "@/lib/types";
 
 function scriptToText(script: Script): string {
@@ -19,9 +19,13 @@ export async function POST(req: NextRequest) {
   }: { script: Script; passedLines: number; totalLines: number } =
     await req.json();
 
+  if (!hasAiApiKey) {
+    return NextResponse.json({ summary: FALLBACK_SUMMARY });
+  }
+
   try {
-    const completion = await openrouter.chat.completions.create({
-      model: MODEL,
+    const completion = await ai.chat.completions.create({
+      model: AI_MODEL,
       messages: [
         {
           role: "user",

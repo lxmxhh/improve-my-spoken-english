@@ -1,7 +1,7 @@
 # English Speaking Practice Website — Design Spec
 
 **Date:** 2026-05-25  
-**Status:** Approved  
+**Status:** Implemented (updated to current codebase on 2026-05-26)  
 
 ---
 
@@ -26,20 +26,29 @@ Build a web app that helps users improve English speaking ability through daily 
 
 ```
 Browser
-├── Web Speech API (STT)       ← Free, browser-native speech recognition (en-US)
-├── Web Speech Synthesis (TTS) ← Free, browser-native text-to-speech for AI lines
-└── Next.js React UI           ← Session flow, progress dashboard
+├── MediaRecorder + getUserMedia  ← Record user speech in webm/opus
+├── Web Speech Synthesis (TTS)    ← Primary in-browser TTS path
+└── Next.js React UI              ← Session flow, progress dashboard, history
 
 Next.js API Routes (Vercel)
 ├── POST /api/generate-script  ← Generate full conversation script for a topic
 ├── POST /api/evaluate-line    ← Semantic match: did user say the expected line?
+├── POST /api/transcribe       ← Speech-to-text (Groq Whisper ensemble)
+├── POST /api/tts-say          ← macOS "say" + afconvert WAV fallback for TTS
 └── POST /api/summarize        ← Generate end-of-session vocabulary + feedback
 
-OpenRouter API
-└── Powers all three API routes above (model-agnostic, e.g. GPT-4o, Claude, Gemini)
+OpenAI-Compatible Chat API
+├── /api/generate-script
+├── /api/evaluate-line
+└── /api/summarize
+
+Groq API
+└── /api/transcribe (whisper-large-v3 + whisper-large-v3-turbo, score-based selection)
 ```
 
-**Browser compatibility:** Chrome and Edge only (Web Speech API requirement). Show a warning banner on Firefox/Safari.
+**Browser compatibility:** Chrome/Chromium preferred (MediaRecorder + microphone access + speechSynthesis behavior).
+
+Note on `/api/tts-say`: this route depends on macOS binaries (`say`, `afconvert`), so it is intended for local macOS runtime and is not portable to standard Linux serverless environments without replacement.
 
 ---
 
@@ -58,25 +67,31 @@ OpenRouter API
 ### 5.1 Topic Selection
 - At session start, call `/api/generate-script` with a randomly chosen category
 - Categories: Daily Life / Work & Career / News & Society / Entertainment & Culture
-- API returns a full script (see §6) and displays 3 topic options for the user to pick
+- API returns one full script (see §6)
+- If generation is slow or fails, route falls back to bundled hardcoded script after timeout (see §9)
 
-### 5.2 Pre-session Warm-up (skippable)
+### 5.2 Pre-session Warm-up
 - AI displays 2–3 keywords from the topic to help user prepare mentally
 - "Ready" button starts the conversation
 
 ### 5.3 Conversation Loop (per line)
 1. Coach's line plays via TTS and is shown as subtitle text
 2. User's reference line is displayed in full: *"You can say: ___{expected line}___"*
-3. User presses and holds the microphone button to record
-4. Recording limits:
-   - Auto-stop and submit after **60 seconds**
-   - If **no speech detected within 10 seconds**, cancel and prompt to retry
-   - A subtle progress bar shows the 60-second countdown during recording
-5. On release (or auto-stop), speech is sent to `/api/evaluate-line`
-6. Evaluation result:
-   - ✅ **Pass** → brief positive indicator, advance to next line
+3. User clicks mic button to start recording; clicks again to stop (toggle interaction)
+4. Recording behavior:
+  - Auto-stop and submit after **10 seconds**
+  - Too-short recording is rejected with retry prompt
+  - A subtle progress bar shows the 10-second countdown during recording
+5. Audio is sent to `/api/transcribe`; transcript is shown on screen in a “You said:” card
+6. Transcript is sent to `/api/evaluate-line`
+7. Evaluation result:
+  - ✅ **Pass** → show success feedback and wait **2 seconds** before advancing
    - ❌ **Fail** → "Try again" prompt, allow one retry
    - ❌ **Fail again** → mark line as failed, coach advances to next line automatically
+
+Extra UX behavior:
+- Feedback text (e.g., "Great!") is cleared when next sentence appears
+- During evaluating or pass-hold delay, input controls are disabled
 
 ### 5.4 End-of-Session Summary
 Triggered when all script lines are complete or the 5-minute timer expires.
@@ -109,7 +124,7 @@ interface ScriptTurn {
 interface Script {
   topic: string         // e.g. "Morning Routine"
   category: string      // e.g. "Daily Life"
-  turns: ScriptTurn[]   // Alternating coach/user, typically 10–16 turns total
+  turns: ScriptTurn[]   // Alternating coach/user, typically 10–14 exchanges target
 }
 ```
 
@@ -137,6 +152,24 @@ Expected line: "{expected}"
 User said: "{actual}"
 Did the user express the same core meaning? Reply with only: yes or no
 ```
+
+Current optimization behavior in implementation:
+- Exact normalized text match => pass immediately
+- Word overlap >= 0.8 => pass immediately (skip LLM)
+- If evaluator returns empty => fallback pass when overlap >= 0.6
+- On evaluator API error => fail-open (`pass: true`)
+
+### Transcription (`/api/transcribe`)
+- Input: multipart form with `audio` and optional `prompt` (expected user line)
+- Runs both `whisper-large-v3` and `whisper-large-v3-turbo`
+- Scores candidates against expected line using word-overlap + character similarity
+- Selects best transcript; if similarity is very high (>= 0.86), snaps transcript to expected line
+- Returns transcript plus debug metadata (`selectedModel`, `score`, `rawTranscript`)
+
+### macOS TTS Fallback (`/api/tts-say`)
+- Input: text + allowed voice
+- Uses `say` to generate AIFF, then `afconvert` to RIFF/WAV for browser playback
+- Caches generated WAV under `.next/tts-cache`
 
 ### Session Summary (`/api/summarize`)
 ```
@@ -190,12 +223,12 @@ interface DailyRecord {
 
 | Scenario | Handling |
 |---|---|
-| Browser doesn't support Web Speech API | Persistent warning banner: "Please use Chrome or Edge for voice features" |
-| Microphone permission denied | Modal with step-by-step instructions to enable mic access |
-| 60-second recording timeout | Auto-submit whatever was recognized; if empty, treat as no-speech |
-| 10 seconds of silence | Cancel recording, show "No speech detected — tap to try again" |
-| OpenRouter API error (any route) | Show inline error toast; session continues with degraded behavior (skip evaluation, mark line as passed) |
-| Script generation failure | Fall back to 5 hardcoded scripts (one per category) bundled in the app |
+| Microphone permission denied | Inline mic error message near recording button |
+| Recording too short or empty | Reject submission and prompt retry |
+| Transcription failure (`/api/transcribe`) | Show retry message; do not advance line |
+| Evaluation API failure (`/api/evaluate-line`) | Fail-open (line treated as passed) |
+| Script generation timeout/failure | `/api/generate-script` falls back to bundled hardcoded script |
+| Browser TTS fails to start | Client attempts `/api/tts-say` fallback audio path |
 
 ---
 
@@ -203,11 +236,13 @@ interface DailyRecord {
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16.2.6 (App Router, Turbopack) |
+| React | React 19.2.4 |
 | Styling | Tailwind CSS |
-| Speech Input | Web Speech API (`SpeechRecognition`) |
-| Speech Output | Web Speech Synthesis API (`speechSynthesis`) |
-| AI | OpenRouter API via `openai` npm package (pointed at `https://openrouter.ai/api/v1`) |
+| Speech Input | MediaRecorder + getUserMedia + Groq Whisper transcription API |
+| Speech Output | Web Speech Synthesis + optional macOS `say` fallback route |
+| AI | OpenAI-compatible chat completions via `openai` npm package, configured with `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` |
+| STT Provider | Groq API via OpenAI-compatible client (`https://api.groq.com/openai/v1`) |
 | State | React `useState` / `useReducer` (no external state library needed) |
 | Persistence | `localStorage` (browser-native) |
 | Hosting | Vercel |
@@ -223,3 +258,27 @@ interface DailyRecord {
 - Pronunciation scoring (phoneme-level analysis)
 - Custom topic input by user
 - Social features (leaderboards, sharing)
+
+---
+
+## 12. Future Optimization Items
+
+### 12.1 Speech Recognition Quality
+
+Current implementation uses Groq Whisper ensemble + expected-line-aware scoring. Quality is improved, but still not perfect for accent-heavy speech, short utterances, and noisy input.
+
+Candidate upgrade paths:
+
+| Option | Best For | Notes |
+|---|---|---|
+| OpenAI `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` | Drop-in improvement for current `/api/transcribe` flow | Keep sending expected line as context; compare latency/cost/accuracy vs current Groq setup. |
+| Azure Speech Pronunciation Assessment | Real English speaking practice feedback | Provides pronunciation-oriented signals beyond raw transcript text, such as accuracy and fluency. Best fit if the product starts showing word-level or pronunciation feedback. |
+| Deepgram Nova-3 / Flux | Real-time or low-latency voice interaction | Consider when moving from "record one line, then submit" to live turn-taking or streaming feedback. |
+| Audio preprocessing | Better input quality before any ASR provider | If recognition remains unstable, normalize server-side audio to mono PCM/WAV, e.g. 16 kHz or provider-recommended format, before transcription. |
+
+Recommended order:
+
+1. Benchmark current Groq ensemble against OpenAI transcribe models on real user samples.
+2. If the product needs pronunciation coaching rather than only semantic pass/fail, evaluate Azure Speech Pronunciation Assessment.
+3. If the UX becomes real-time conversational practice, evaluate Deepgram streaming models.
+4. Add audio normalization only if provider changes do not sufficiently improve recognition accuracy.

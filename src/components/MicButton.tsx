@@ -6,13 +6,12 @@ interface MicButtonProps {
   onResult: (transcript: string) => void;
   onNoSpeech: () => void;
   disabled: boolean;
-  /** Expected line — passed to Whisper as initial_prompt to improve accuracy */
+  /** Expected line passed as transcription context to improve accuracy. */
   prompt?: string;
 }
 
 type MicState = "idle" | "listening" | "processing";
 
-const TIMEOUT_MS = 60_000;
 const AUTO_STOP_MS = 10_000; // auto-stop after 10s silence (no manual stop)
 
 export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: MicButtonProps) {

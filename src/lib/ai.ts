@@ -1,12 +1,16 @@
 import OpenAI from "openai";
 
-export const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY ?? "",
-  defaultHeaders: {
-    "HTTP-Referer": "https://english-speaking-practice.vercel.app",
-    "X-Title": "English Speaking Practice",
-  },
-});
+export const AI_BASE_URL =
+  process.env.AI_BASE_URL ?? "https://dashscope.aliyuncs.com/compatible-mode/v1";
 
-export const MODEL = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o";
+export const AI_MODEL = process.env.AI_MODEL ?? "qwen-plus";
+
+export const AI_API_KEY =
+  process.env.AI_API_KEY ?? process.env.DASHSCOPE_API_KEY ?? "";
+
+export const hasAiApiKey = AI_API_KEY.trim().length > 0;
+
+export const ai = new OpenAI({
+  baseURL: AI_BASE_URL,
+  apiKey: AI_API_KEY || "missing-api-key",
+});

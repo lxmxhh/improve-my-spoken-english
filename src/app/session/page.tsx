@@ -11,6 +11,8 @@ import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type { Script, ScriptTurn, TurnResult } from "@/lib/types";
 import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
+const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Stage = "loading" | "warmup" | "conversation" | "summarizing" | "summary";
@@ -381,7 +383,7 @@ export default function SessionPage() {
     utterance.rate = 0.85;
     const enVoice = pickEnglishVoice(voices);
     if (enVoice) { utterance.voice = enVoice; utterance.lang = enVoice.lang; }
-    console.log("[TTS] speaking with:", enVoice?.name, enVoice?.lang);
+    if (DEBUG_TTS) console.log("[TTS] speaking with:", enVoice?.name, enVoice?.lang);
     manualTtsRef.current = utterance;
     let intentionalCancel = false;
     let started = false;
@@ -403,11 +405,11 @@ export default function SessionPage() {
       synth.cancel();
       if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
       manualTtsFallbackRef.current = null;
-      console.log("[TTS] Web Speech did not start; using macOS say audio");
+      if (DEBUG_TTS) console.log("[TTS] Web Speech did not start; using macOS say audio");
       try {
         await playMacSpeechAudio(text, "Samantha");
       } catch (error) {
-        console.log("[TTS] macOS audio fallback failed", error);
+        console.error("[TTS] macOS audio fallback failed", error);
       } finally {
         finish();
       }
@@ -416,7 +418,7 @@ export default function SessionPage() {
       started = true;
       if (startFallback) clearTimeout(startFallback);
       startFallback = null;
-      console.log("[TTS] onstart");
+      if (DEBUG_TTS) console.log("[TTS] onstart");
     };
     utterance.onend = finish;
     utterance.onerror = (e) => {
@@ -426,7 +428,7 @@ export default function SessionPage() {
       if (!started) {
         void playMacFallback();
       } else {
-        console.log("[TTS] onerror", e.error);
+        console.error("[TTS] onerror", e.error);
         finish();
       }
     };
@@ -443,7 +445,7 @@ export default function SessionPage() {
     try {
       synth.speak(utterance);
     } catch (error) {
-      console.log("[TTS] speak failed", error);
+      console.error("[TTS] speak failed", error);
       finish();
     }
   }, []);

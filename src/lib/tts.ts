@@ -13,12 +13,14 @@ const PREFERRED_VOICES = [
   "Google UK English Male",
 ];
 
+const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
+
 export function pickEnglishVoice(availableVoices?: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
   const voices = availableVoices ?? window.speechSynthesis.getVoices();
   if (voices.length === 0) return null;
 
-  // 1. Preferred names (Chrome built-in first, then macOS standard)
+  // 1. Preferred names (macOS standard first, then Chrome built-in fallback)
   for (const name of PREFERRED_VOICES) {
     const v = voices.find((v) => v.name === name);
     if (v) return v;
@@ -59,32 +61,37 @@ export function waitForSpeechVoices(timeoutMs = 1500): Promise<SpeechSynthesisVo
 }
 
 export async function playMacSpeechAudio(text: string, voice = "Samantha"): Promise<void> {
-  console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
+  if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
   const response = await fetch("/api/tts-say", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, voice }),
   });
 
-  console.log("[TTS] /api/tts-say status:", response.status);
+  if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
   if (!response.ok) {
     const err = await response.text().catch(() => "");
     throw new Error(`tts-say ${response.status}: ${err}`);
   }
 
   const blob = await response.blob();
-  console.log("[TTS] blob size:", blob.size, "type:", blob.type);
+  if (DEBUG_TTS) console.log("[TTS] blob size:", blob.size, "type:", blob.type);
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
 
   await new Promise<void>((resolve, reject) => {
-    audio.onended = () => { console.log("[TTS] audio ended"); resolve(); };
+    audio.onended = () => {
+      if (DEBUG_TTS) console.log("[TTS] audio ended");
+      resolve();
+    };
     audio.onerror = (e) => {
       console.error("[TTS] audio.onerror:", e);
       reject(new Error("Failed to play audio"));
     };
     audio.play()
-      .then(() => console.log("[TTS] audio.play() ok"))
+      .then(() => {
+        if (DEBUG_TTS) console.log("[TTS] audio.play() ok");
+      })
       .catch((e) => { console.error("[TTS] audio.play() rejected:", e); reject(e); });
   }).finally(() => {
     URL.revokeObjectURL(url);

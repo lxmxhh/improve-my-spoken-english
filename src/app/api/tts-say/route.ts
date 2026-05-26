@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 const execFileAsync = promisify(execFile);
 const CACHE_DIR = join(process.cwd(), ".next", "tts-cache");
 const ALLOWED_VOICES = new Set(["Samantha", "Alex", "Ava", "Nicky", "Susan"]);
+const DEBUG_TTS = process.env.DEBUG_TTS === "1";
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     // Return cached WAV if it exists
     try {
       const audio = await readFile(wavPath);
-      console.log("[TTS] cache hit", hash);
+      if (DEBUG_TTS) console.log("[TTS] cache hit", hash);
       return new NextResponse(audio, {
         headers: {
           "Content-Type": "audio/wav",
@@ -45,14 +46,14 @@ export async function POST(request: Request) {
     // Step 1: say → AIFF (native macOS format)
     // Step 2: afconvert → proper RIFF/WAV (Chrome-compatible)
     const aiffPath = join(CACHE_DIR, `${hash}.aiff`);
-    console.log("[TTS] generating", voice, safeText.slice(0, 40));
+    if (DEBUG_TTS) console.log("[TTS] generating", voice, safeText.slice(0, 40));
 
     await execFileAsync("say", ["-v", voice, "-o", aiffPath, safeText]);
     await execFileAsync("afconvert", ["-f", "WAVE", "-d", "LEI16@22050", aiffPath, wavPath]);
     await unlink(aiffPath).catch(() => {});
 
     const audio = await readFile(wavPath);
-    console.log("[TTS] generated", audio.length, "bytes");
+    if (DEBUG_TTS) console.log("[TTS] generated", audio.length, "bytes");
     return new NextResponse(audio, {
       headers: {
         "Content-Type": "audio/wav",
