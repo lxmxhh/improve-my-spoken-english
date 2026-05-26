@@ -86,6 +86,31 @@ async function transcribeWithModel(audio: File, prompt: string | null, model: (t
   return (transcription.text ?? "").trim();
 }
 
+async function runTranscriptionPass(
+  bytes: ArrayBuffer,
+  fileName: string,
+  mimeType: string,
+  prompt: string | null
+) {
+  const results = await Promise.allSettled(
+    MODELS.map((model) => {
+      const modelFile = new File([bytes], fileName, { type: mimeType });
+      return transcribeWithModel(modelFile, prompt, model);
+    })
+  );
+
+  const candidates = results.map((r, i) => {
+    const model = MODELS[i];
+    if (r.status === "fulfilled") {
+      return { model, text: r.value, score: scoreCandidate(r.value, prompt ?? undefined) };
+    }
+    console.warn(`[Transcribe] ${model} failed`, r.reason);
+    return { model, text: "", score: -1 };
+  });
+
+  return candidates.reduce((acc, cur) => (cur.score > acc.score ? cur : acc), candidates[0]);
+}
+
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json({ error: "GROQ_API_KEY not configured" }, { status: 500 });
@@ -100,22 +125,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No audio provided" }, { status: 400 });
     }
 
-    console.log("[Transcribe] audio size:", audio.size, "prompt:", prompt?.slice(0, 60));
+    const bytes = await audio.arrayBuffer();
+    const fileName = audio.name || "speech.webm";
+    const mimeType = audio.type || "audio/webm";
 
-    const results = await Promise.allSettled(MODELS.map((model) => transcribeWithModel(audio, prompt, model)));
-    const candidates = results.map((r, i) => {
-      const model = MODELS[i];
-      if (r.status === "fulfilled") {
-        return { model, text: r.value, score: scoreCandidate(r.value, prompt ?? undefined) };
-      }
-      console.warn(`[Transcribe] ${model} failed`, r.reason);
-      return { model, text: "", score: -1 };
-    });
+    console.log("[Transcribe] audio size:", audio.size, "type:", mimeType, "prompt:", prompt?.slice(0, 60));
 
-    const best = candidates.reduce((acc, cur) => (cur.score > acc.score ? cur : acc), candidates[0]);
+    // Pass 1: normal transcription with expected-line prompt.
+    let best = await runTranscriptionPass(bytes, fileName, mimeType, prompt);
+
+    // Pass 2 fallback: if empty, retry without prompt (sometimes prompt over-constrains decoding).
+    if (!best.text && prompt) {
+      console.warn("[Transcribe] empty with prompt; retrying without prompt");
+      best = await runTranscriptionPass(bytes, fileName, mimeType, null);
+    }
 
     if (!best.text) {
-      return NextResponse.json({ error: "No transcription result" }, { status: 500 });
+      // Recoverable case: no transcript from provider. Return 200 so client can
+      // show retry UX without surfacing a hard server error.
+      return NextResponse.json({ transcript: "", error: "No transcription result" });
     }
 
     // For line-repetition practice, if the recognized line is already very close,

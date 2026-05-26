@@ -41,6 +41,18 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
     streamRef.current = null;
   }
 
+  function stopRecorder() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    // Flush buffered data before stopping to avoid false "too short" detection.
+    try {
+      recorder.requestData();
+    } catch {
+      // ignore
+    }
+    recorder.stop();
+  }
+
   async function sendAudio(chunks: Blob[], mimeType: string) {
     setState("processing");
     try {
@@ -54,7 +66,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
       if (!res.ok || !data.transcript?.trim()) {
         console.warn("[STT] no transcript:", data);
         setState("idle");
-        setErrorMsg("No speech recognized — please try again.");
+        setErrorMsg("Could not transcribe this attempt. Try speaking a full sentence a bit slower and closer to the mic.");
         onNoSpeech();
       } else {
         console.log("[STT] transcript:", data.transcript);
@@ -76,7 +88,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
     // Second click: stop recording
     if (stateRef.current === "listening") {
       clearTimers();
-      mediaRecorderRef.current?.stop(); // triggers onstop → sendAudio
+      stopRecorder(); // triggers onstop → sendAudio
       return;
     }
 
@@ -103,9 +115,11 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
         stopStream();
         const chunks = chunksRef.current;
         const type = recorder.mimeType || "audio/webm";
-        if (chunks.length === 0 || chunks.reduce((s, b) => s + b.size, 0) < 1000) {
+        const totalBytes = chunks.reduce((s, b) => s + b.size, 0);
+        console.log("[STT] recorded chunks:", chunks.length, "bytes:", totalBytes);
+        if (totalBytes === 0) {
           setState("idle");
-          setErrorMsg("Recording was too short — please try again.");
+          setErrorMsg("No audio captured — please try again.");
           onNoSpeech();
           return;
         }
@@ -120,7 +134,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
       autoStopRef.current = setTimeout(() => {
         if (stateRef.current === "listening") {
           clearTimers();
-          mediaRecorderRef.current?.stop();
+          stopRecorder();
         }
       }, AUTO_STOP_MS);
 
