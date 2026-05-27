@@ -76,6 +76,55 @@ function scoreCandidate(text: string, expected?: string): number {
   return 0.45 * w + 0.55 * c;
 }
 
+function shouldUseExpectedTranscript(candidate: string, expected: string): boolean {
+  const w = wordOverlap(candidate, expected);
+  const c = charSimilarity(candidate, expected);
+  const normalizedCandidate = normalizeText(candidate);
+  const normalizedExpected = normalizeText(expected);
+
+  if (!normalizedCandidate || !normalizedExpected) return false;
+
+  const expectedWords = normalizedExpected.split(" ").filter(Boolean);
+  const candidateWords = normalizedCandidate.split(" ").filter(Boolean);
+  const lengthRatio = candidateWords.length / Math.max(1, expectedWords.length);
+
+  return (
+    c >= 0.78 ||
+    (w >= 0.55 && lengthRatio >= 0.45) ||
+    (w >= 0.42 && c >= 0.58 && lengthRatio >= 0.45)
+  );
+}
+
+function isLikelyHallucinatedTranscript(candidate: string, expected?: string): boolean {
+  const normalizedCandidate = normalizeText(candidate);
+  if (!normalizedCandidate) return true;
+
+  const genericShortOutputs = new Set([
+    "thank you",
+    "thanks",
+    "thank you very much",
+    "thanks for watching",
+    "thank you for watching",
+    "bye",
+    "goodbye",
+  ]);
+
+  if (!expected) return genericShortOutputs.has(normalizedCandidate);
+
+  const normalizedExpected = normalizeText(expected);
+  const candidateWords = normalizedCandidate.split(" ").filter(Boolean);
+  const expectedWords = normalizedExpected.split(" ").filter(Boolean);
+  const w = wordOverlap(candidate, expected);
+  const c = charSimilarity(candidate, expected);
+  const lengthRatio = candidateWords.length / Math.max(1, expectedWords.length);
+
+  return (
+    genericShortOutputs.has(normalizedCandidate) ||
+    (expectedWords.length >= 8 && candidateWords.length <= 2 && w < 0.2) ||
+    (expectedWords.length >= 10 && lengthRatio < 0.25 && w < 0.25 && c < 0.45)
+  );
+}
+
 async function transcribeWithModel(audio: File, prompt: string | null, model: (typeof MODELS)[number]) {
   const transcription = await groq.audio.transcriptions.create({
     file: audio,
@@ -134,21 +183,32 @@ export async function POST(request: Request) {
     // Pass 1: normal transcription with expected-line prompt.
     let best = await runTranscriptionPass(bytes, fileName, mimeType, prompt);
 
-    // Pass 2 fallback: if empty, retry without prompt (sometimes prompt over-constrains decoding).
-    if (!best.text && prompt) {
-      console.warn("[Transcribe] empty with prompt; retrying without prompt");
-      best = await runTranscriptionPass(bytes, fileName, mimeType, null);
+    // Pass 2 fallback: retry without prompt if the prompted decode is empty or
+    // looks like a common Whisper hallucination such as "Thank you".
+    if ((!best.text || isLikelyHallucinatedTranscript(best.text, prompt ?? undefined)) && prompt) {
+      console.warn("[Transcribe] weak prompted transcript; retrying without prompt:", best.text);
+      const unprompted = await runTranscriptionPass(bytes, fileName, mimeType, null);
+      if (unprompted.text && !isLikelyHallucinatedTranscript(unprompted.text, prompt)) {
+        best = unprompted;
+      }
     }
 
-    if (!best.text) {
+    if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt ?? undefined)) {
       // Recoverable case: no transcript from provider. Return 200 so client can
       // show retry UX without surfacing a hard server error.
-      return NextResponse.json({ transcript: "", error: "No transcription result" });
+      console.warn("[Transcribe] rejected low-confidence transcript:", best.text);
+      return NextResponse.json({
+        transcript: "",
+        rawTranscript: best.text,
+        error: "Low-confidence transcription",
+      });
     }
 
-    // For line-repetition practice, if the recognized line is already very close,
-    // snap to the expected text to remove minor ASR spelling/punctuation noise.
-    const shouldSnapToExpected = Boolean(prompt && best.score >= 0.86);
+    // For line-repetition practice, if recognition is plausibly close to the
+    // displayed prompt, prefer the expected text. This reduces frustrating ASR
+    // drift on short learner utterances while still preserving clearly different
+    // speech for evaluation.
+    const shouldSnapToExpected = Boolean(prompt && shouldUseExpectedTranscript(best.text, prompt));
     const transcript = shouldSnapToExpected ? (prompt as string) : best.text;
 
     console.log("[Transcribe] selected:", best.model, "score:", best.score.toFixed(3), "text:", transcript);

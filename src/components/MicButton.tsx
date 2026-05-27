@@ -44,12 +44,6 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
   function stopRecorder() {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state !== "recording") return;
-    // Flush buffered data before stopping to avoid false "too short" detection.
-    try {
-      recorder.requestData();
-    } catch {
-      // ignore
-    }
     recorder.stop();
   }
 
@@ -113,20 +107,22 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
 
       recorder.onstop = () => {
         stopStream();
-        const chunks = chunksRef.current;
-        const type = recorder.mimeType || "audio/webm";
-        const totalBytes = chunks.reduce((s, b) => s + b.size, 0);
-        console.log("[STT] recorded chunks:", chunks.length, "bytes:", totalBytes);
-        if (totalBytes === 0) {
-          setState("idle");
-          setErrorMsg("No audio captured — please try again.");
-          onNoSpeech();
-          return;
-        }
-        void sendAudio(chunks, type);
+        setTimeout(() => {
+          const chunks = chunksRef.current;
+          const type = recorder.mimeType || "audio/webm";
+          const totalBytes = chunks.reduce((s, b) => s + b.size, 0);
+          console.log("[STT] recorded chunks:", chunks.length, "bytes:", totalBytes);
+          if (totalBytes === 0) {
+            setState("idle");
+            setErrorMsg("No audio captured — please try again.");
+            onNoSpeech();
+            return;
+          }
+          void sendAudio(chunks, type);
+        }, 50);
       };
 
-      recorder.start(250); // collect chunks every 250ms
+      recorder.start();
       setState("listening");
       setCountdown(AUTO_STOP_MS / 1000);
 
