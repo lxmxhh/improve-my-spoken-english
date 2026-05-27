@@ -27,14 +27,14 @@ Build a web app that helps users improve English speaking ability through daily 
 ```
 Browser
 ├── MediaRecorder + getUserMedia  ← Record user speech in webm/opus
-├── Web Speech Synthesis (TTS)    ← Primary in-browser TTS path
+├── Web Speech Synthesis (TTS)    ← Browser-native first attempt
 └── Next.js React UI              ← Session flow, progress dashboard, history
 
 Next.js API Routes (Vercel)
 ├── POST /api/generate-script  ← Generate full conversation script for a topic
 ├── POST /api/evaluate-line    ← Semantic match: did user say the expected line?
 ├── POST /api/transcribe       ← Speech-to-text (Groq Whisper ensemble)
-├── POST /api/tts-say          ← macOS "say" + afconvert WAV fallback for TTS
+├── POST /api/tts-say          ← Qwen-TTS WAV generation with macOS fallback
 └── POST /api/summarize        ← Generate end-of-session vocabulary + feedback
 
 OpenAI-Compatible Chat API
@@ -44,11 +44,14 @@ OpenAI-Compatible Chat API
 
 Groq API
 └── /api/transcribe (whisper-large-v3 + whisper-large-v3-turbo, score-based selection)
+
+DashScope Qwen-TTS
+└── /api/tts-say (qwen3-tts-flash by default, downloads returned WAV URL and caches locally)
 ```
 
 **Browser compatibility:** Chrome/Chromium preferred (MediaRecorder + microphone access + speechSynthesis behavior).
 
-Note on `/api/tts-say`: this route depends on macOS binaries (`say`, `afconvert`), so it is intended for local macOS runtime and is not portable to standard Linux serverless environments without replacement.
+Note on `/api/tts-say`: Qwen-TTS is the preferred path. If Qwen-TTS is unavailable, the local development fallback depends on macOS binaries (`say`, `afconvert`).
 
 ---
 
@@ -169,10 +172,11 @@ Current optimization behavior in implementation:
 - Selects best transcript; if similarity is very high (>= 0.86), snaps transcript to expected line
 - Returns transcript plus debug metadata (`selectedModel`, `score`, `rawTranscript`)
 
-### macOS TTS Fallback (`/api/tts-say`)
-- Input: text + allowed voice
-- Uses `say` to generate AIFF, then `afconvert` to RIFF/WAV for browser playback
-- Caches generated WAV under `.next/tts-cache`
+### TTS (`/api/tts-say`)
+- Input: text plus optional voice fields
+- Preferred path: DashScope Qwen-TTS (`qwen3-tts-flash` by default, `Jennifer` English voice by default)
+- Downloads the returned audio URL, stores the WAV under `.next/tts-cache`, then returns `audio/wav`
+- Fallback path: macOS `say` generates AIFF, then `afconvert` converts it to RIFF/WAV for browser playback
 
 ### Session Summary (`/api/summarize`)
 ```
@@ -231,7 +235,7 @@ interface DailyRecord {
 | Transcription failure (`/api/transcribe`) | Show retry message; do not advance line |
 | Evaluation API failure (`/api/evaluate-line`) | Fail-open (line treated as passed) |
 | Script generation timeout/failure | `/api/generate-script` falls back to bundled hardcoded script |
-| Browser TTS fails to start | Client attempts `/api/tts-say` fallback audio path |
+| Browser TTS fails to start | Client attempts `/api/tts-say`; server uses Qwen-TTS first, then macOS fallback |
 
 ---
 
@@ -243,7 +247,8 @@ interface DailyRecord {
 | React | React 19.2.4 |
 | Styling | Tailwind CSS |
 | Speech Input | MediaRecorder + getUserMedia + Groq Whisper transcription API |
-| Speech Output | Web Speech Synthesis + optional macOS `say` fallback route |
+| Speech Output | Web Speech Synthesis + Qwen-TTS route with macOS `say` fallback |
+| TTS Provider | DashScope Qwen-TTS via HTTP API (`https://dashscope.aliyuncs.com/api/v1`) |
 | AI | OpenAI-compatible chat completions via `openai` npm package, configured with `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` |
 | STT Provider | Groq API via OpenAI-compatible client (`https://api.groq.com/openai/v1`) |
 | State | React `useState` / `useReducer` (no external state library needed) |
