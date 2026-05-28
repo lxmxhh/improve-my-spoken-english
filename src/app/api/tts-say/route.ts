@@ -15,7 +15,7 @@ const TTS_PROVIDER = process.env.TTS_PROVIDER ?? "qwen";
 const QWEN_TTS_BASE_URL =
   process.env.QWEN_TTS_BASE_URL ?? "https://dashscope.aliyuncs.com/api/v1";
 const QWEN_TTS_MODEL = process.env.QWEN_TTS_MODEL ?? "qwen3-tts-flash";
-const QWEN_TTS_VOICE = process.env.QWEN_TTS_VOICE ?? "Jennifer";
+const QWEN_TTS_VOICE = process.env.QWEN_TTS_VOICE ?? "Ethan"; // “Vivian:Cherry”
 const QWEN_TTS_LANGUAGE = process.env.QWEN_TTS_LANGUAGE ?? "English";
 const QWEN_TTS_API_KEY =
   process.env.QWEN_TTS_API_KEY ??
