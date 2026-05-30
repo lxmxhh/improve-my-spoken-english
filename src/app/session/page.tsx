@@ -4,7 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
-import MicButton from "@/components/MicButton";
+import MicButton, { type PronunciationAssessment } from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
@@ -216,6 +216,10 @@ export default function SessionPage() {
   const manualTtsRef = useRef<SpeechSynthesisUtterance | null>(null);
   const manualTtsFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [passAdvanceSec, setPassAdvanceSec] = useState<number | null>(null);
+  const [textInput, setTextInput] = useState("");
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [lastAssessment, setLastAssessment] = useState<PronunciationAssessment | null>(null);
+  const [isTtsPlaying, setIsTtsPlaying] = useState(false);
 
   // Load script on mount
   useEffect(() => {
@@ -291,62 +295,20 @@ export default function SessionPage() {
 
   // Evaluate user speech
   const handleTranscript = useCallback(
-    async (transcript: string) => {
+    async (transcript: string, assessment?: PronunciationAssessment) => {
       setLastTranscript(transcript);
-      const { script, currentScriptIndex } = state;
-      if (!script) return;
-      const expectedTurn = script.turns[currentScriptIndex];
-      if (!expectedTurn || expectedTurn.speaker !== "user") return;
-
-      dispatch({ type: "EVALUATING", value: true });
-      try {
-        const res = await fetch("/api/evaluate-line", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ expected: expectedTurn.text, actual: transcript }),
-        });
-        const { pass } = await res.json();
-        if (pass) {
-          dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex });
-          setPassAdvanceSec(2);
-          if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
-          if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
-          passAdvanceCountdownRef.current = setInterval(() => {
-            setPassAdvanceSec((s) => (s && s > 1 ? s - 1 : 1));
-          }, 1000);
-          passAdvanceTimeoutRef.current = setTimeout(() => {
-            dispatch({ type: "ADVANCE_AFTER_PASS" });
-            if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
-            passAdvanceCountdownRef.current = null;
-            setPassAdvanceSec(null);
-          }, 2000);
-          return;
-        }
-
-        setPassAdvanceSec(null);
-        if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
-        if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
-        passAdvanceTimeoutRef.current = null;
-        passAdvanceCountdownRef.current = null;
-        dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex });
-      } catch {
-        // Fail-open
-        dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
-      }
+      setLastAssessment(assessment ?? null);
     },
-    [state]
+    []
   );
 
   const handleNoSpeech = useCallback(() => {
     // Just reset — let user try again, don't count as attempt
   }, []);
 
-  const [textInput, setTextInput] = useState("");
-  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
-  const [isTtsPlaying, setIsTtsPlaying] = useState(false);
-
   useEffect(() => {
     setLastTranscript(null);
+    setLastAssessment(null);
     setPassAdvanceSec(null);
     dispatch({ type: "CLEAR_FEEDBACK" });
     if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
@@ -602,6 +564,22 @@ export default function SessionPage() {
                 <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-sm text-blue-800">
                   <span className="text-xs text-blue-400 mr-1">You said:</span>
                   {lastTranscript}
+                </div>
+              )}
+
+              {lastAssessment && (
+                <div className="w-full grid grid-cols-4 gap-2 text-center">
+                  {[
+                    ["Pron.", lastAssessment.pronunciationScore],
+                    ["Accuracy", lastAssessment.accuracyScore],
+                    ["Fluency", lastAssessment.fluencyScore],
+                    ["Complete", lastAssessment.completenessScore],
+                  ].map(([label, score]) => (
+                    <div key={label} className="rounded-xl border border-gray-200 bg-white px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+                      <div className="text-sm font-semibold text-gray-800">{score}</div>
+                    </div>
+                  ))}
                 </div>
               )}
 
