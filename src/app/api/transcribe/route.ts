@@ -1,7 +1,20 @@
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+
+const execFileAsync = promisify(execFile);
+const TEMP_DIR = join(process.cwd(), ".next", "transcribe-temp");
+const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY ?? "";
+const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION ?? "";
+const AZURE_TRANSCRIBE_TIMEOUT_MS =
+  Number(process.env.AZURE_TRANSCRIBE_TIMEOUT_MS) || 30_000;
 
 const groq = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
@@ -125,6 +138,103 @@ function isLikelyHallucinatedTranscript(candidate: string, expected?: string): b
   );
 }
 
+function hasSpokenWords(text: string): boolean {
+  return /[a-z0-9]/i.test(text);
+}
+
+async function convertToWav(bytes: ArrayBuffer, extension = "webm"): Promise<Buffer> {
+  await mkdir(TEMP_DIR, { recursive: true });
+  const id = randomUUID();
+  const inputPath = join(TEMP_DIR, `${id}.input.${extension}`);
+  const wavPath = join(TEMP_DIR, `${id}.output.wav`);
+
+  try {
+    await writeFile(inputPath, Buffer.from(bytes));
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      inputPath,
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-f",
+      "wav",
+      wavPath,
+    ]);
+    return await readFile(wavPath);
+  } finally {
+    await unlink(inputPath).catch(() => {});
+    await unlink(wavPath).catch(() => {});
+  }
+}
+
+async function transcribeWithAzure(bytes: ArrayBuffer, mimeType: string): Promise<string> {
+  if (!AZURE_SPEECH_KEY || !AZURE_SPEECH_REGION) return "";
+
+  const extension = mimeType.includes("wav") ? "wav" : "webm";
+  const wav = await convertToWav(bytes, extension);
+  const speechConfig = sdk.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION);
+  speechConfig.speechRecognitionLanguage = "en-US";
+  speechConfig.outputFormat = sdk.OutputFormat.Detailed;
+
+  const audioConfig = sdk.AudioConfig.fromWavFileInput(wav, "speech.wav");
+  const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
+
+  try {
+    const segments = await withTimeout(
+      recognizeContinuously(recognizer),
+      AZURE_TRANSCRIBE_TIMEOUT_MS
+    );
+    return segments.join(" ").replace(/\s+/g, " ").trim();
+  } finally {
+    recognizer.close();
+    audioConfig.close();
+  }
+}
+
+function recognizeContinuously(recognizer: sdk.SpeechRecognizer): Promise<string[]> {
+  const segments: string[] = [];
+
+  return new Promise((resolve, reject) => {
+    recognizer.recognized = (_, event) => {
+      if (event.result.reason === sdk.ResultReason.RecognizedSpeech) {
+        const text = event.result.text.trim();
+        if (text) segments.push(text);
+      }
+    };
+
+    recognizer.canceled = (_, event) => {
+      if (event.reason === sdk.CancellationReason.EndOfStream) {
+        resolve(segments);
+        return;
+      }
+      reject(new Error(event.errorDetails || `Azure recognition canceled: ${event.reason}`));
+    };
+
+    recognizer.sessionStopped = () => {
+      resolve(segments);
+    };
+
+    recognizer.startContinuousRecognitionAsync(
+      undefined,
+      (error) => reject(error)
+    );
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Azure transcription timeout")), timeoutMs);
+    }),
+  ]);
+}
+
 async function transcribeWithModel(audio: File, prompt: string | null, model: (typeof MODELS)[number]) {
   const transcription = await groq.audio.transcriptions.create({
     file: audio,
@@ -180,27 +290,52 @@ export async function POST(request: Request) {
 
     console.log("[Transcribe] audio size:", audio.size, "type:", mimeType, "prompt:", prompt?.slice(0, 60));
 
-    // Pass 1: normal transcription with expected-line prompt.
-    let best = await runTranscriptionPass(bytes, fileName, mimeType, prompt);
-
-    // Pass 2 fallback: retry without prompt if the prompted decode is empty or
-    // looks like a common Whisper hallucination such as "Thank you".
-    if ((!best.text || isLikelyHallucinatedTranscript(best.text, prompt ?? undefined)) && prompt) {
-      console.warn("[Transcribe] weak prompted transcript; retrying without prompt:", best.text);
-      const unprompted = await runTranscriptionPass(bytes, fileName, mimeType, null);
-      if (unprompted.text && !isLikelyHallucinatedTranscript(unprompted.text, prompt)) {
-        best = unprompted;
+    if (!prompt) {
+      try {
+        const azureTranscript = await transcribeWithAzure(bytes, mimeType);
+        if (hasSpokenWords(azureTranscript)) {
+          console.log("[Transcribe] selected: azure text:", azureTranscript);
+          return NextResponse.json({
+            transcript: azureTranscript,
+            rawTranscript: azureTranscript,
+            selectedModel: "azure-speech-continuous",
+            score: null,
+          });
+        }
+      } catch (error) {
+        console.warn("[Transcribe] Azure STT failed; falling back to Groq", error);
       }
     }
 
-    if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt ?? undefined)) {
+    let best = await runTranscriptionPass(bytes, fileName, mimeType, prompt);
+
+    if (prompt) {
+      // Retry without prompt if the prompted decode is empty or looks like a
+      // common Whisper hallucination such as "Thank you".
+      if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt)) {
+        console.warn("[Transcribe] weak prompted transcript; retrying without prompt:", best.text);
+        const unprompted = await runTranscriptionPass(bytes, fileName, mimeType, null);
+        if (unprompted.text && !isLikelyHallucinatedTranscript(unprompted.text, prompt)) {
+          best = unprompted;
+        }
+      }
+
+      if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt)) {
+        console.warn("[Transcribe] rejected low-confidence transcript:", best.text);
+        return NextResponse.json({
+          transcript: "",
+          rawTranscript: best.text,
+          error: "Low-confidence transcription",
+        });
+      }
+    } else if (!best.text) {
       // Recoverable case: no transcript from provider. Return 200 so client can
       // show retry UX without surfacing a hard server error.
-      console.warn("[Transcribe] rejected low-confidence transcript:", best.text);
+      console.warn("[Transcribe] empty transcript");
       return NextResponse.json({
         transcript: "",
         rawTranscript: best.text,
-        error: "Low-confidence transcription",
+        error: "No transcription result",
       });
     }
 

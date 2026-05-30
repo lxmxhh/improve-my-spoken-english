@@ -55,6 +55,12 @@ export default function HomePage() {
             View past sessions →
           </Link>
         )}
+        <Link
+          href="/stt-test"
+          className="w-full text-center text-blue-600 hover:text-blue-700 text-sm py-2 transition-colors"
+        >
+          Test speech recognition
+        </Link>
       </div>
     </div>
   );

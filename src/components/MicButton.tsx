@@ -3,26 +3,103 @@
 import { useEffect, useRef, useState } from "react";
 
 interface MicButtonProps {
-  onResult: (transcript: string) => void;
+  onResult: (transcript: string, assessment?: PronunciationAssessment) => void | Promise<void>;
   onNoSpeech: () => void;
   disabled: boolean;
-  /** Expected line passed as transcription context to improve accuracy. */
   prompt?: string;
 }
 
 type MicState = "idle" | "listening" | "processing";
+type CaptureMode = "worklet" | "media-recorder";
 
-const AUTO_STOP_MS = 10_000; // auto-stop after 10s silence (no manual stop)
+export interface PronunciationAssessment {
+  transcript?: string;
+  pass: boolean;
+  pronunciationScore: number;
+  accuracyScore: number;
+  fluencyScore: number;
+  completenessScore: number;
+  words?: {
+    word: string;
+    accuracyScore?: number;
+    errorType?: string;
+  }[];
+}
 
-export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: MicButtonProps) {
+const AUTO_STOP_MS = 10_000;
+const MIN_RECORDING_MS = 800;
+const MIN_AUDIO_BYTES = 2_000;
+
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let i = 0; i < value.length; i++) {
+    view.setUint8(offset + i, value.charCodeAt(i));
+  }
+}
+
+function countSamples(samples: Float32Array[]) {
+  return samples.reduce((total, chunk) => total + chunk.length, 0);
+}
+
+function inferSampleRate(samples: Float32Array[], durationMs: number, fallbackSampleRate: number) {
+  const sampleCount = countSamples(samples);
+  if (sampleCount <= 0 || durationMs <= 0) return fallbackSampleRate;
+
+  const inferred = sampleCount / (durationMs / 1000);
+  const commonRates = [16_000, 22_050, 24_000, 32_000, 44_100, 48_000, 88_200, 96_000];
+  const nearest = commonRates.reduce((best, rate) => (
+    Math.abs(rate - inferred) < Math.abs(best - inferred) ? rate : best
+  ), commonRates[0]);
+
+  if (Math.abs(nearest - inferred) / nearest < 0.08) return nearest;
+  return Math.round(inferred);
+}
+
+function encodeWav(samples: Float32Array[], sampleRate: number) {
+  const sampleCount = countSamples(samples);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + sampleCount * 2, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, sampleCount * 2, true);
+
+  let offset = 44;
+  for (const chunk of samples) {
+    for (const sample of chunk) {
+      const value = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonProps) {
   const [micState, setMicState] = useState<MicState>("idle");
   const [countdown, setCountdown] = useState(AUTO_STOP_MS / 1000);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const stateRef = useRef<MicState>("idle");
+  const activeModeRef = useRef<CaptureMode>("worklet");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const samplesRef = useRef<Float32Array[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const recordingStartedAtRef = useRef<number>(0);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -34,39 +111,53 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
   function clearTimers() {
     if (autoStopRef.current) clearTimeout(autoStopRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
+    autoStopRef.current = null;
+    countdownRef.current = null;
   }
 
   function stopStream() {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }
 
-  function stopRecorder() {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state !== "recording") return;
-    recorder.stop();
+  function stopWorkletGraph() {
+    workletNodeRef.current?.disconnect();
+    mediaSourceRef.current?.disconnect();
+    workletNodeRef.current = null;
+    mediaSourceRef.current = null;
+
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context && context.state !== "closed") {
+      void context.close();
+    }
   }
 
-  async function sendAudio(chunks: Blob[], mimeType: string) {
+  async function sendAudio(blob: Blob, fileName: string) {
     setState("processing");
+
     try {
-      const blob = new Blob(chunks, { type: mimeType });
-      console.log("[STT] sending audio, size:", blob.size, "type:", mimeType);
+      if (blob.size < MIN_AUDIO_BYTES) {
+        setState("idle");
+        setErrorMsg("No usable audio captured — please try again.");
+        onNoSpeech();
+        return;
+      }
+
       const form = new FormData();
-      form.append("audio", blob, "speech.webm");
-      if (prompt) form.append("prompt", prompt);
+      form.append("audio", blob, fileName);
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
       const data = await res.json() as { transcript?: string; error?: string };
+
       if (!res.ok || !data.transcript?.trim()) {
-        console.warn("[STT] no transcript:", data);
         setState("idle");
         setErrorMsg("Could not transcribe this attempt. Try speaking a full sentence a bit slower and closer to the mic.");
         onNoSpeech();
-      } else {
-        console.log("[STT] transcript:", data.transcript);
-        setState("processing");
-        onResult(data.transcript.trim());
+        return;
       }
+
+      await onResult(data.transcript.trim());
+      setState("idle");
     } catch (err) {
       console.error("[STT] transcribe error:", err);
       setState("idle");
@@ -75,73 +166,139 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
     }
   }
 
+  async function finalizeWorkletRecording() {
+    clearTimers();
+    const durationMs = Date.now() - recordingStartedAtRef.current;
+    const contextSampleRate = audioContextRef.current?.sampleRate ?? 48_000;
+    const sampleRate = inferSampleRate(samplesRef.current, durationMs, contextSampleRate);
+
+    stopWorkletGraph();
+    stopStream();
+
+    const blob = encodeWav(samplesRef.current, sampleRate);
+    await sendAudio(blob, "speech.wav");
+  }
+
+  async function finalizeMediaRecorderRecording() {
+    clearTimers();
+    stopStream();
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const type = mediaRecorderRef.current?.mimeType || "audio/webm";
+    const blob = new Blob(chunksRef.current, { type });
+    await sendAudio(blob, "speech.webm");
+  }
+
+  async function startWorkletRecording(stream: MediaStream) {
+    const audioContext = new AudioContext();
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    await audioContext.audioWorklet.addModule("/audio-recorder-worklet.js");
+    const source = audioContext.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(audioContext, "audio-recorder-processor");
+    samplesRef.current = [];
+
+    node.port.onmessage = (event: MessageEvent<Float32Array>) => {
+      samplesRef.current.push(event.data);
+    };
+
+    source.connect(node);
+    node.connect(audioContext.destination);
+
+    audioContextRef.current = audioContext;
+    mediaSourceRef.current = source;
+    workletNodeRef.current = node;
+    activeModeRef.current = "worklet";
+  }
+
+  function startMediaRecorderRecording(stream: MediaStream) {
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = recorder;
+    chunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      void finalizeMediaRecorderRecording();
+    };
+
+    recorder.start(250);
+    activeModeRef.current = "media-recorder";
+  }
+
+  async function stopRecording() {
+    const elapsed = Date.now() - recordingStartedAtRef.current;
+    if (elapsed < MIN_RECORDING_MS) return;
+
+    if (activeModeRef.current === "worklet") {
+      await finalizeWorkletRecording();
+      return;
+    }
+
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    recorder.requestData();
+    recorder.stop();
+  }
+
   async function toggleListening() {
     setErrorMsg(null);
     if (disabled) return;
 
-    // Second click: stop recording
     if (stateRef.current === "listening") {
-      clearTimers();
-      stopRecorder(); // triggers onstop → sendAudio
+      await stopRecording();
       return;
     }
 
     if (stateRef.current !== "idle") return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "";
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
+      try {
+        await startWorkletRecording(stream);
+      } catch (workletError) {
+        console.warn("[STT] AudioWorklet unavailable, falling back to MediaRecorder:", workletError);
+        stopWorkletGraph();
+        startMediaRecorderRecording(stream);
+      }
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        stopStream();
-        setTimeout(() => {
-          const chunks = chunksRef.current;
-          const type = recorder.mimeType || "audio/webm";
-          const totalBytes = chunks.reduce((s, b) => s + b.size, 0);
-          console.log("[STT] recorded chunks:", chunks.length, "bytes:", totalBytes);
-          if (totalBytes === 0) {
-            setState("idle");
-            setErrorMsg("No audio captured — please try again.");
-            onNoSpeech();
-            return;
-          }
-          void sendAudio(chunks, type);
-        }, 50);
-      };
-
-      recorder.start();
+      recordingStartedAtRef.current = Date.now();
       setState("listening");
       setCountdown(AUTO_STOP_MS / 1000);
 
-      // Auto-stop after AUTO_STOP_MS
       autoStopRef.current = setTimeout(() => {
         if (stateRef.current === "listening") {
-          clearTimers();
-          stopRecorder();
+          void stopRecording();
         }
       }, AUTO_STOP_MS);
 
-      // Countdown
       countdownRef.current = setInterval(() => {
-        setCountdown((c) => Math.max(0, c - 1));
+        setCountdown((current) => Math.max(0, current - 1));
       }, 1000);
-
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : "";
       console.error("[STT] getUserMedia failed:", err);
+      stopWorkletGraph();
+      stopStream();
       if (name === "NotAllowedError") {
         setErrorMsg("Microphone permission denied. Please allow access and try again.");
       } else {
@@ -159,6 +316,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, prompt }: Mi
 
   useEffect(() => () => {
     clearTimers();
+    stopWorkletGraph();
     stopStream();
   }, []);
 

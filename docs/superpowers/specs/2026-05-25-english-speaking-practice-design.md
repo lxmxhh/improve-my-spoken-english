@@ -34,6 +34,7 @@ Next.js API Routes (Vercel)
 ├── POST /api/generate-script  ← Generate full conversation script for a topic
 ├── POST /api/evaluate-line    ← Semantic match: did user say the expected line?
 ├── POST /api/transcribe       ← Speech-to-text (Groq Whisper ensemble)
+├── POST /api/pronunciation-assess ← Azure pronunciation scoring for reference-line practice
 ├── POST /api/tts-say          ← Qwen-TTS WAV generation with macOS fallback
 └── POST /api/summarize        ← Generate end-of-session vocabulary + feedback
 
@@ -44,6 +45,9 @@ OpenAI-Compatible Chat API
 
 Groq API
 └── /api/transcribe (whisper-large-v3 + whisper-large-v3-turbo, score-based selection)
+
+Azure Speech
+└── /api/pronunciation-assess (Pronunciation Assessment with accuracy, fluency, completeness, word scores)
 
 DashScope Qwen-TTS
 └── /api/tts-say (qwen3-tts-flash by default, downloads returned WAV URL and caches locally)
@@ -85,8 +89,8 @@ Note on `/api/tts-say`: Qwen-TTS is the preferred path. If Qwen-TTS is unavailab
   - Auto-stop and submit after **10 seconds**
   - Too-short recording is rejected with retry prompt
   - A subtle progress bar shows the 10-second countdown during recording
-5. Audio is sent to `/api/transcribe`; transcript is shown on screen in a “You said:” card
-6. Transcript is sent to `/api/evaluate-line`
+5. Audio is sent to `/api/pronunciation-assess` when a reference line is available
+6. If Azure assessment fails, audio falls back to `/api/transcribe` and `/api/evaluate-line`
 7. Evaluation result:
   - ✅ **Pass** → show success feedback and wait **2 seconds** before advancing
    - ❌ **Fail** → "Try again" prompt, allow one retry
@@ -172,6 +176,13 @@ Current optimization behavior in implementation:
 - Selects best transcript; if similarity is very high (>= 0.86), snaps transcript to expected line
 - Returns transcript plus debug metadata (`selectedModel`, `score`, `rawTranscript`)
 
+### Pronunciation Assessment (`/api/pronunciation-assess`)
+- Input: multipart form with browser audio and `referenceText`
+- Converts browser `webm/opus` audio to 16 kHz mono WAV using `ffmpeg`
+- Sends WAV to Azure Speech Pronunciation Assessment with `en-US`, hundred-mark grading, phoneme granularity, and miscue enabled
+- Returns transcript, pass/fail, pronunciation, accuracy, fluency, completeness, and word-level scores
+- Default pass threshold is 70, configurable with `AZURE_PRONUNCIATION_PASS_SCORE`
+
 ### TTS (`/api/tts-say`)
 - Input: text plus optional voice fields
 - Preferred path: DashScope Qwen-TTS (`qwen3-tts-flash` by default, `Jennifer` English voice by default)
@@ -232,6 +243,7 @@ interface DailyRecord {
 |---|---|
 | Microphone permission denied | Inline mic error message near recording button |
 | Recording too short or empty | Reject submission and prompt retry |
+| Pronunciation assessment failure | Fall back to `/api/transcribe` and `/api/evaluate-line` |
 | Transcription failure (`/api/transcribe`) | Show retry message; do not advance line |
 | Evaluation API failure (`/api/evaluate-line`) | Fail-open (line treated as passed) |
 | Script generation timeout/failure | `/api/generate-script` falls back to bundled hardcoded script |
@@ -249,6 +261,7 @@ interface DailyRecord {
 | Speech Input | MediaRecorder + getUserMedia + Groq Whisper transcription API |
 | Speech Output | Web Speech Synthesis + Qwen-TTS route with macOS `say` fallback |
 | TTS Provider | DashScope Qwen-TTS via HTTP API (`https://dashscope.aliyuncs.com/api/v1`) |
+| Pronunciation Provider | Azure Speech Pronunciation Assessment |
 | AI | OpenAI-compatible chat completions via `openai` npm package, configured with `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` |
 | STT Provider | Groq API via OpenAI-compatible client (`https://api.groq.com/openai/v1`) |
 | State | React `useState` / `useReducer` (no external state library needed) |
