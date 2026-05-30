@@ -1,4 +1,4 @@
-# Speech Recognition & Pronunciation Evaluation — Implementation Plan
+# Speech Recognition & Pronunciation Evaluation (Azure) — Implementation Plan
 
 **Date:** 2026-05-28  
 **Based on:** [2026-05-28-stt-pronunciation-evaluation-optimization-design.md](2026-05-28-stt-pronunciation-evaluation-optimization-design.md)
@@ -11,12 +11,12 @@ This plan implements Phase 1 only:
 
 - Introduce `practice | assessment` mode through client and API chain.
 - Make assessment mode strict (no prompt bias, no snap-to-expected).
-- Extend evaluation from binary pass/fail to include deterministic score dimensions.
+- Route strict scoring through Azure Pronunciation Assessment.
+- Keep `/api/evaluate-line` as a compatibility fallback only.
 - Keep full backward compatibility for existing practice session flow.
 
 Out of scope in this plan:
 
-- Provider migration to phoneme/prosody-native pronunciation APIs.
 - Personalized long-term weakness analytics.
 
 ---
@@ -35,14 +35,11 @@ Out of scope in this plan:
 - In assessment mode, disable transcript snapping.
 - Return strictness metadata for diagnostics.
 
-### M3. Score model in evaluator
+### M3. Azure pronunciation assessment path
 
-- Add deterministic score object:
-  - accuracy
-  - completeness
-  - fluencyProxy
-  - overall
-- Keep `pass` field for compatibility.
+- Add request wiring from session UI to `/api/pronunciation-assess`.
+- Render Azure pronunciation metrics in the session UI.
+- Keep `pass` field for compatibility when falling back to `/api/evaluate-line`.
 
 ### M4. Assessment UI feedback
 
@@ -51,7 +48,7 @@ Out of scope in this plan:
 
 ### M5. Tests + verification + docs sync
 
-- Unit tests for scoring helpers.
+- Unit tests for Azure mode switch and compatibility fallback.
 - Regression checks on existing session progression.
 - Update design/spec docs if implementation deviates.
 
@@ -67,8 +64,8 @@ Changes:
 
 - Add state `mode: "practice" | "assessment"`.
 - Add UI control (session-level toggle in warmup or header).
-- Pass mode to `MicButton` and `handleTranscript` request bodies.
-- Store evaluator response details in state for assessment score display.
+- Pass mode to `MicButton` and the assessment request bodies.
+- Store Azure pronunciation assessment details in state for assessment score display.
 - Render score breakdown card when mode is `assessment`.
 
 Definition of done:
@@ -83,6 +80,7 @@ Changes:
 
 - Add optional prop `mode` (default `practice`) for request payload.
 - Include `mode` in `/api/transcribe` multipart form.
+- Include `referenceText` / prompt wiring for assessment calls if needed by the downstream route.
 - Keep recording behavior unchanged (manual stop + 10s auto-stop).
 
 Definition of done:
@@ -99,6 +97,7 @@ Definition of done:
 Changes:
 
 - Parse `mode` from form data; default to `practice`.
+- Use Azure STT as the primary recognizer path.
 - In `assessment` mode:
   - force `prompt = null` before transcription pass
   - skip expected-transcript snapping logic entirely
@@ -120,17 +119,13 @@ Definition of done:
 Changes:
 
 - Parse `mode` from request body; default to `practice`.
-- Extract reusable scoring helpers:
-  - normalize / overlap / char similarity
-  - completeness estimator
-  - fluency proxy estimator (phase 1 simple heuristic)
-  - overall weighted score
+- Keep this endpoint as a compatibility fallback for coarse scoring.
 - Response shape:
   - keep `pass`
-  - add optional `scores` and `diagnostics`
+  - add optional `scores` and `diagnostics` when falling back
 - Pass rule:
   - `practice`: keep current lenient behavior.
-  - `assessment`: pass by threshold on overall score.
+  - `assessment`: prefer Azure pronunciation assessment; use this endpoint only if Azure assessment is unavailable.
 
 Definition of done:
 
@@ -147,8 +142,8 @@ Changes:
 
 - Add shared types:
   - `PracticeMode`
-  - `EvaluationScores`
-  - optional evaluator response type
+  - `PronunciationAssessment`
+  - optional fallback evaluator response type
 
 Definition of done:
 
@@ -195,6 +190,37 @@ Definition of done:
 }
 ```
 
+For Azure responses, `selectedModel` should identify the Azure speech path rather than a Whisper model.
+
+### 4.2.1 `/api/pronunciation-assess` request
+
+```ts
+{
+  audio: File;
+  referenceText: string;
+}
+```
+
+### 4.2.2 `/api/pronunciation-assess` response
+
+```ts
+{
+  transcript: string;
+  referenceText: string;
+  pass: boolean;
+  pronunciationScore: number;
+  accuracyScore: number;
+  fluencyScore: number;
+  completenessScore: number;
+  words?: Array<{
+    word: string;
+    accuracyScore?: number;
+    errorType?: string;
+  }>;
+  error?: string;
+}
+```
+
 ### 4.3 `/api/evaluate-line` request
 
 ```ts
@@ -228,26 +254,27 @@ Definition of done:
 
 Target files:
 
-- New test for evaluator helpers (co-located or under `src/lib/__tests__`).
+- New test for Azure mode wiring and fallback scoring behavior.
 
 Cases:
 
 - exact match -> high accuracy/high overall
 - missing words -> lower completeness
 - substitution-heavy mismatch -> lower accuracy
-- threshold boundary around pass cutoff (e.g., 69/70/71)
+- Azure assessment response shape is preserved
+- fallback endpoint does not override Azure results
 
 ## 5.2 API behavior checks
 
 - `assessment` mode in transcribe ignores prompt.
 - `assessment` mode never snaps transcript to expected.
-- evaluator returns `scores` in assessment mode.
-- evaluator still returns usable `pass` in practice mode.
+- pronunciation assessment returns pronunciation/accuracy/fluency/completeness.
+- fallback evaluator still returns usable `pass` in practice mode.
 
 ## 5.3 Manual E2E checks
 
 1. Practice mode: current session UX unchanged.
-2. Assessment mode: same utterance shows score card and stricter outcomes.
+2. Assessment mode: same utterance shows Azure score card and stricter outcomes.
 3. Intentional misread sentence should no longer be silently corrected to expected.
 
 ---
