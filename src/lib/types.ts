@@ -1,3 +1,19 @@
+export type PracticeMode = "practice" | "assessment";
+
+export interface PronunciationAssessment {
+  transcript?: string;
+  pass: boolean;
+  pronunciationScore: number;
+  accuracyScore: number;
+  fluencyScore: number;
+  completenessScore: number;
+  words?: {
+    word: string;
+    accuracyScore?: number;
+    errorType?: string;
+  }[];
+}
+
 export interface ScriptTurn {
   speaker: "coach" | "user";
   text: string;

@@ -1,34 +1,37 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PracticeMode, PronunciationAssessment } from "@/lib/types";
+
+// Re-export for consumers that import from this module
+export type { PronunciationAssessment } from "@/lib/types";
 
 interface MicButtonProps {
   onResult: (transcript: string, assessment?: PronunciationAssessment) => void | Promise<void>;
   onNoSpeech: () => void;
   disabled: boolean;
-  prompt?: string;
+  mode?: PracticeMode;
+  referenceText?: string;
 }
 
 type MicState = "idle" | "listening" | "processing";
 type CaptureMode = "worklet" | "media-recorder";
 
-export interface PronunciationAssessment {
-  transcript?: string;
-  pass: boolean;
-  pronunciationScore: number;
-  accuracyScore: number;
-  fluencyScore: number;
-  completenessScore: number;
-  words?: {
-    word: string;
-    accuracyScore?: number;
-    errorType?: string;
-  }[];
-}
-
 const AUTO_STOP_MS = 10_000;
 const MIN_RECORDING_MS = 800;
 const MIN_AUDIO_BYTES = 2_000;
+const MIN_AUTO_STOP_MS = 10_000;
+const MAX_AUTO_STOP_MS = 25_000;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function estimateRecordingLimitMs(referenceText?: string) {
+  const words = referenceText?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+  if (words === 0) return AUTO_STOP_MS;
+  return clamp(Math.ceil(words * 700 + 3_000), MIN_AUTO_STOP_MS, MAX_AUTO_STOP_MS);
+}
 
 function writeAscii(view: DataView, offset: number, value: string) {
   for (let i = 0; i < value.length; i++) {
@@ -85,9 +88,10 @@ function encodeWav(samples: Float32Array[], sampleRate: number) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonProps) {
+export default function MicButton({ onResult, onNoSpeech, disabled, mode = "practice", referenceText }: MicButtonProps) {
   const [micState, setMicState] = useState<MicState>("idle");
   const [countdown, setCountdown] = useState(AUTO_STOP_MS / 1000);
+  const [recordingLimitSec, setRecordingLimitSec] = useState(AUTO_STOP_MS / 1000);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const stateRef = useRef<MicState>("idle");
@@ -102,6 +106,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
   const recordingStartedAtRef = useRef<number>(0);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingLimitMsRef = useRef(AUTO_STOP_MS);
 
   function setState(s: MicState) {
     stateRef.current = s;
@@ -144,20 +149,41 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
         return;
       }
 
-      const form = new FormData();
-      form.append("audio", blob, fileName);
-      const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      const data = await res.json() as { transcript?: string; error?: string };
+      if (mode === "assessment" && referenceText) {
+        // Assessment mode: call pronunciation-assess for strict scoring
+        const form = new FormData();
+        form.append("audio", blob, fileName);
+        form.append("referenceText", referenceText);
+        const res = await fetch("/api/pronunciation-assess", { method: "POST", body: form });
+        const data = await res.json() as PronunciationAssessment & { error?: string };
 
-      if (!res.ok || !data.transcript?.trim()) {
+        if (!res.ok || data.error) {
+          setState("idle");
+          setErrorMsg("Could not assess pronunciation. Please try again.");
+          onNoSpeech();
+          return;
+        }
+
+        await onResult(data.transcript ?? "", data);
         setState("idle");
-        setErrorMsg("Could not transcribe this attempt. Try speaking a full sentence a bit slower and closer to the mic.");
-        onNoSpeech();
-        return;
-      }
+      } else {
+        // Practice mode: transcribe without snap-to-expected bias
+        const form = new FormData();
+        form.append("audio", blob, fileName);
+        form.append("mode", "practice");
+        const res = await fetch("/api/transcribe", { method: "POST", body: form });
+        const data = await res.json() as { transcript?: string; error?: string };
 
-      await onResult(data.transcript.trim());
-      setState("idle");
+        if (!res.ok || !data.transcript?.trim()) {
+          setState("idle");
+          setErrorMsg("Could not transcribe this attempt. Try speaking a full sentence a bit slower and closer to the mic.");
+          onNoSpeech();
+          return;
+        }
+
+        await onResult(data.transcript.trim());
+        setState("idle");
+      }
     } catch (err) {
       console.error("[STT] transcribe error:", err);
       setState("idle");
@@ -282,14 +308,17 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
       }
 
       recordingStartedAtRef.current = Date.now();
+      const recordingLimitMs = estimateRecordingLimitMs(referenceText);
+      recordingLimitMsRef.current = recordingLimitMs;
+      setRecordingLimitSec(Math.ceil(recordingLimitMs / 1000));
       setState("listening");
-      setCountdown(AUTO_STOP_MS / 1000);
+      setCountdown(Math.ceil(recordingLimitMs / 1000));
 
       autoStopRef.current = setTimeout(() => {
         if (stateRef.current === "listening") {
           void stopRecording();
         }
-      }, AUTO_STOP_MS);
+      }, recordingLimitMs);
 
       countdownRef.current = setInterval(() => {
         setCountdown((current) => Math.max(0, current - 1));
@@ -310,7 +339,8 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
   useEffect(() => {
     if (!disabled && stateRef.current === "processing") {
       setState("idle");
-      setCountdown(AUTO_STOP_MS / 1000);
+      setCountdown(Math.ceil(recordingLimitMsRef.current / 1000));
+      setRecordingLimitSec(Math.ceil(recordingLimitMsRef.current / 1000));
     }
   }, [disabled]);
 
@@ -362,7 +392,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
           <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div
               className="bg-red-500 h-1.5 rounded-full transition-all duration-1000"
-              style={{ width: `${(countdown / (AUTO_STOP_MS / 1000)) * 100}%` }}
+              style={{ width: `${(countdown / recordingLimitSec) * 100}%` }}
             />
           </div>
           <span className="text-xs text-gray-500">{countdown}s remaining</span>
@@ -370,7 +400,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled }: MicButtonP
       )}
 
       <p className="text-xs text-gray-400">
-        {isListening ? "Listening… click to stop" : isProcessing ? "Transcribing…" : "Click to speak"}
+        {isListening ? "Listening… click to stop" : isProcessing ? (mode === "assessment" ? "Assessing…" : "Transcribing…") : "Click to speak"}
       </p>
     </div>
   );

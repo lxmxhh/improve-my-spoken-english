@@ -10,16 +10,37 @@ interface CoachLineProps {
 
 export default function CoachLine({ text, onDone }: CoachLineProps) {
   const doneRef = useRef(false);
+  const finishRef = useRef<() => void>(() => {});
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     doneRef.current = false;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const estimatedMs = Math.max(3000, words * 450);
+    let forceAdvance: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+      if (!doneRef.current) {
+        doneRef.current = true;
+        utteranceRef.current = null;
+        if (forceAdvance) clearTimeout(forceAdvance);
+        forceAdvance = null;
+        onDone();
+      }
+    };
+    finishRef.current = finish;
+
+    forceAdvance = setTimeout(finish, estimatedMs + 5000);
+
     if (typeof window === "undefined" || !window.speechSynthesis) {
       // TTS not available — just advance after a short delay
       const t = setTimeout(() => {
-        if (!doneRef.current) { doneRef.current = true; onDone(); }
+        finish();
       }, 1500);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        if (forceAdvance) clearTimeout(forceAdvance);
+      };
     }
 
     const synth = window.speechSynthesis;
@@ -28,14 +49,6 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     let startFallback: ReturnType<typeof setTimeout> | null = null;
     let started = false;
     let fallbackStarted = false;
-
-    const finish = () => {
-      if (!doneRef.current) {
-        doneRef.current = true;
-        utteranceRef.current = null;
-        onDone();
-      }
-    };
 
     async function speak() {
       const voices = await waitForSpeechVoices();
@@ -62,7 +75,10 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
         if (fallback) clearTimeout(fallback);
         fallback = null;
         try {
-          await playMacSpeechAudio(text, "Samantha");
+          await Promise.race([
+            playMacSpeechAudio(text, "Samantha"),
+            new Promise<void>((resolve) => setTimeout(resolve, estimatedMs + 2000)),
+          ]);
         } finally {
           finish();
         }
@@ -82,8 +98,6 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
         }
       };
 
-      const words = text.split(" ").length;
-      const estimatedMs = Math.max(3000, words * 450);
       startFallback = setTimeout(() => {
         if (!started) void playMacFallback();
       }, 1200);
@@ -101,6 +115,8 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       cancelled = true;
       if (fallback) clearTimeout(fallback);
       if (startFallback) clearTimeout(startFallback);
+      if (forceAdvance) clearTimeout(forceAdvance);
+      finishRef.current = () => {};
       utteranceRef.current = null;
       synth.cancel();
     };
@@ -113,6 +129,13 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
         A
       </div>
       <p className="text-gray-800 leading-relaxed pt-0.5">{text}</p>
+      <button
+        type="button"
+        onClick={() => finishRef.current()}
+        className="ml-auto flex-shrink-0 text-xs font-medium text-blue-500 hover:text-blue-700"
+      >
+        Continue
+      </button>
     </div>
   );
 }

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
-import MicButton, { type PronunciationAssessment } from "@/components/MicButton";
+import MicButton from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
-import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
+import { getImmediateScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
-import type { Script, ScriptTurn, TurnResult } from "@/lib/types";
+import type { PracticeMode, PronunciationAssessment, Script, ScriptTurn, TurnResult } from "@/lib/types";
 import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
@@ -75,7 +75,7 @@ function extractKeywords(script: Script): string[] {
     .map(([w]) => w);
 }
 
-const CATEGORIES = ["Daily Life", "Work & Career", "News & Society", "Entertainment & Culture"];
+const CATEGORIES = [...SCRIPT_CATEGORIES];
 const SESSION_MAX_SEC = 300;
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -220,22 +220,36 @@ export default function SessionPage() {
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [lastAssessment, setLastAssessment] = useState<PronunciationAssessment | null>(null);
   const [isTtsPlaying, setIsTtsPlaying] = useState(false);
+  const [mode, setMode] = useState<PracticeMode>("practice");
+
+  const loadNextScript = useCallback(() => {
+    const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    dispatch({ type: "SCRIPT_LOADED", script: getImmediateScript(category) });
+    void refillScriptPool(category);
+  }, []);
+
+  const clearSessionUiState = useCallback(() => {
+    setTextInput("");
+    setLastTranscript(null);
+    setLastAssessment(null);
+    setPassAdvanceSec(null);
+    setIsTtsPlaying(false);
+    if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
+    manualTtsFallbackRef.current = null;
+    manualTtsRef.current = null;
+    if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+    passAdvanceTimeoutRef.current = null;
+    if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+    passAdvanceCountdownRef.current = null;
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
 
   // Load script on mount
   useEffect(() => {
-    const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    fetch("/api/generate-script", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category }),
-    })
-      .then((r) => r.json())
-      .then((script: Script) => dispatch({ type: "SCRIPT_LOADED", script }))
-      .catch(() => {
-        const fallback = FALLBACK_SCRIPTS[Math.floor(Math.random() * FALLBACK_SCRIPTS.length)];
-        dispatch({ type: "SCRIPT_LOADED", script: fallback });
-      });
-  }, []);
+    loadNextScript();
+  }, [loadNextScript]);
 
   // Timer during conversation
   useEffect(() => {
@@ -285,6 +299,7 @@ export default function SessionPage() {
 
     saveSession(session);
     computeAndUpdateStreak(session.id);
+    recordScriptPerformance(state.script, passedLines, totalLines);
   }, [state.script, state.userTurnIndices, state.results, state.elapsedSec]);
 
   useEffect(() => {
@@ -298,8 +313,61 @@ export default function SessionPage() {
     async (transcript: string, assessment?: PronunciationAssessment) => {
       setLastTranscript(transcript);
       setLastAssessment(assessment ?? null);
+
+      const { script, currentScriptIndex } = state;
+      if (!script) return;
+      const expectedTurn = script.turns[currentScriptIndex];
+      if (!expectedTurn || expectedTurn.speaker !== "user") return;
+
+      dispatch({ type: "EVALUATING", value: true });
+      try {
+        let pass: boolean;
+
+        if (assessment) {
+          // Assessment mode: Azure pronunciation result is authoritative
+          pass = assessment.pass;
+        } else {
+          // Practice mode: semantic / lenient evaluation
+          const res = await fetch("/api/evaluate-line", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ expected: expectedTurn.text, actual: transcript }),
+          });
+          const data = await res.json() as { pass: boolean };
+          pass = data.pass;
+        }
+
+        if (pass) {
+          dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex });
+          setPassAdvanceSec(2);
+          if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+          if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+          passAdvanceCountdownRef.current = setInterval(() => {
+            setPassAdvanceSec((s) => (s && s > 1 ? s - 1 : 1));
+          }, 1000);
+          passAdvanceTimeoutRef.current = setTimeout(() => {
+            dispatch({ type: "ADVANCE_AFTER_PASS" });
+            if (passAdvanceCountdownRef.current) {
+              clearInterval(passAdvanceCountdownRef.current);
+              passAdvanceCountdownRef.current = null;
+            }
+            setPassAdvanceSec(null);
+          }, 2000);
+          return;
+        }
+
+        if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
+        if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+        passAdvanceTimeoutRef.current = null;
+        passAdvanceCountdownRef.current = null;
+        setPassAdvanceSec(null);
+        dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex });
+      } catch {
+        // Fail-open: don't block the user on evaluation errors
+        dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
+      }
     },
-    []
+    [state]
   );
 
   const handleNoSpeech = useCallback(() => {
@@ -307,15 +375,12 @@ export default function SessionPage() {
   }, []);
 
   useEffect(() => {
-    setLastTranscript(null);
-    setLastAssessment(null);
-    setPassAdvanceSec(null);
-    dispatch({ type: "CLEAR_FEEDBACK" });
-    if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
-    passAdvanceTimeoutRef.current = null;
-    if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
-    passAdvanceCountdownRef.current = null;
-  }, [state.currentScriptIndex]);
+    const timeout = setTimeout(() => {
+      clearSessionUiState();
+      dispatch({ type: "CLEAR_FEEDBACK" });
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [clearSessionUiState, state.currentScriptIndex]);
 
   useEffect(() => {
     return () => {
@@ -464,6 +529,38 @@ export default function SessionPage() {
               </div>
             </div>
           )}
+          {/* Mode selector */}
+          <div className="w-full flex flex-col gap-2">
+            <p className="text-sm text-gray-500 text-center">Practice mode</p>
+            <div className="flex rounded-xl overflow-hidden border border-gray-200 w-full">
+              <button
+                onClick={() => setMode("practice")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  mode === "practice"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Practice
+              </button>
+              <button
+                onClick={() => setMode("assessment")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  mode === "assessment"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Assessment
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 text-center">
+              {mode === "practice"
+                ? "Lenient — pass on similar meaning"
+                : "Strict — Azure scores your actual pronunciation"}
+            </p>
+          </div>
+
           <button
             onClick={() => dispatch({ type: "START_CONVERSATION" })}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-10 rounded-xl transition-colors text-lg"
@@ -478,6 +575,12 @@ export default function SessionPage() {
   if ((stage === "conversation" || stage === "summarizing") && script) {
     const currentTurn = script.turns[state.currentScriptIndex];
     const isUserTurn = currentTurn?.speaker === "user";
+    const previousCoachTurn = isUserTurn
+      ? script.turns
+          .slice(0, state.currentScriptIndex)
+          .reverse()
+          .find((turn) => turn.speaker === "coach")
+      : null;
     const totalUserTurns = state.userTurnIndices.length;
     const progress = totalUserTurns > 0
       ? Math.round((state.currentUserTurnPos / totalUserTurns) * 100)
@@ -518,6 +621,32 @@ export default function SessionPage() {
 
           {isUserTurn && stage === "conversation" && (
             <div className="flex flex-col items-center gap-5 w-full">
+              {previousCoachTurn && (
+                <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 w-full">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
+                      A
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-blue-400 mb-1">Alex asked:</p>
+                      <p className="text-gray-800 font-medium leading-relaxed">
+                        {previousCoachTurn.text}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => speakLine(previousCoachTurn.text)}
+                      disabled={isTtsPlaying}
+                      title="Hear Alex again"
+                      className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
+                    >
+                      {isTtsPlaying ? (
+                        <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+                      ) : "🔊"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Reference line with listen button */}
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 w-full">
                 <div className="flex items-start gap-3">
@@ -557,7 +686,8 @@ export default function SessionPage() {
                 onResult={handleTranscript}
                 onNoSpeech={handleNoSpeech}
                 disabled={state.evaluating || state.pendingPassAdvance}
-                prompt={currentTurn.hint ?? currentTurn.text}
+                mode={mode}
+                referenceText={currentTurn.hint ?? currentTurn.text}
               />
 
               {lastTranscript && (
@@ -567,19 +697,47 @@ export default function SessionPage() {
                 </div>
               )}
 
-              {lastAssessment && (
-                <div className="w-full grid grid-cols-4 gap-2 text-center">
-                  {[
-                    ["Pron.", lastAssessment.pronunciationScore],
-                    ["Accuracy", lastAssessment.accuracyScore],
-                    ["Fluency", lastAssessment.fluencyScore],
-                    ["Complete", lastAssessment.completenessScore],
-                  ].map(([label, score]) => (
-                    <div key={label} className="rounded-xl border border-gray-200 bg-white px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
-                      <div className="text-sm font-semibold text-gray-800">{score}</div>
+              {mode === "assessment" && lastAssessment && (
+                <div className="w-full flex flex-col gap-2">
+                  <div className="w-full grid grid-cols-4 gap-2 text-center">
+                    {([
+                      ["Pron.", lastAssessment.pronunciationScore],
+                      ["Accuracy", lastAssessment.accuracyScore],
+                      ["Fluency", lastAssessment.fluencyScore],
+                      ["Complete", lastAssessment.completenessScore],
+                    ] as [string, number][]).map(([label, score]) => (
+                      <div
+                        key={label}
+                        className={`rounded-xl border px-2 py-2 ${
+                          score >= 80
+                            ? "border-emerald-200 bg-emerald-50"
+                            : score >= 60
+                            ? "border-amber-200 bg-amber-50"
+                            : "border-red-200 bg-red-50"
+                        }`}
+                      >
+                        <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+                        <div className={`text-sm font-bold ${
+                          score >= 80 ? "text-emerald-700" : score >= 60 ? "text-amber-700" : "text-red-700"
+                        }`}>{score}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {lastAssessment.words && lastAssessment.words.some((w) => w.errorType && w.errorType !== "None") && (
+                    <div className="w-full flex flex-wrap gap-1">
+                      {lastAssessment.words
+                        .filter((w) => w.errorType && w.errorType !== "None")
+                        .map((w, i) => (
+                          <span
+                            key={i}
+                            className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5"
+                            title={w.errorType}
+                          >
+                            {w.word}
+                          </span>
+                        ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
 
@@ -627,7 +785,9 @@ export default function SessionPage() {
             passedLines={passedLines}
             totalLines={totalLines}
             onNext={() => {
+              clearSessionUiState();
               dispatch({ type: "RESET" });
+              loadNextScript();
             }}
             onDone={() => router.push("/")}
           />

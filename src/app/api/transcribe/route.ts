@@ -279,6 +279,11 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const audio = formData.get("audio") as File | null;
     const prompt = formData.get("prompt") as string | null;
+    const mode = (formData.get("mode") as string | null) ?? "practice";
+    const isAssessment = mode === "assessment";
+
+    // In assessment mode, ignore any supplied prompt to avoid biasing the transcript
+    const effectivePrompt = isAssessment ? null : prompt;
 
     if (!audio || audio.size === 0) {
       return NextResponse.json({ error: "No audio provided" }, { status: 400 });
@@ -288,9 +293,9 @@ export async function POST(request: Request) {
     const fileName = audio.name || "speech.webm";
     const mimeType = audio.type || "audio/webm";
 
-    console.log("[Transcribe] audio size:", audio.size, "type:", mimeType, "prompt:", prompt?.slice(0, 60));
+    console.log("[Transcribe] mode:", mode, "audio size:", audio.size, "type:", mimeType, "prompt:", effectivePrompt?.slice(0, 60));
 
-    if (!prompt) {
+    if (!effectivePrompt) {
       try {
         const azureTranscript = await transcribeWithAzure(bytes, mimeType);
         if (hasSpokenWords(azureTranscript)) {
@@ -300,6 +305,7 @@ export async function POST(request: Request) {
             rawTranscript: azureTranscript,
             selectedModel: "azure-speech-continuous",
             score: null,
+            strict: isAssessment,
           });
         }
       } catch (error) {
@@ -307,25 +313,26 @@ export async function POST(request: Request) {
       }
     }
 
-    let best = await runTranscriptionPass(bytes, fileName, mimeType, prompt);
+    let best = await runTranscriptionPass(bytes, fileName, mimeType, effectivePrompt);
 
-    if (prompt) {
+    if (effectivePrompt) {
       // Retry without prompt if the prompted decode is empty or looks like a
       // common Whisper hallucination such as "Thank you".
-      if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt)) {
+      if (!best.text || isLikelyHallucinatedTranscript(best.text, effectivePrompt)) {
         console.warn("[Transcribe] weak prompted transcript; retrying without prompt:", best.text);
         const unprompted = await runTranscriptionPass(bytes, fileName, mimeType, null);
-        if (unprompted.text && !isLikelyHallucinatedTranscript(unprompted.text, prompt)) {
+        if (unprompted.text && !isLikelyHallucinatedTranscript(unprompted.text, effectivePrompt)) {
           best = unprompted;
         }
       }
 
-      if (!best.text || isLikelyHallucinatedTranscript(best.text, prompt)) {
+      if (!best.text || isLikelyHallucinatedTranscript(best.text, effectivePrompt)) {
         console.warn("[Transcribe] rejected low-confidence transcript:", best.text);
         return NextResponse.json({
           transcript: "",
           rawTranscript: best.text,
           error: "Low-confidence transcription",
+          strict: isAssessment,
         });
       }
     } else if (!best.text) {
@@ -336,22 +343,22 @@ export async function POST(request: Request) {
         transcript: "",
         rawTranscript: best.text,
         error: "No transcription result",
+        strict: isAssessment,
       });
     }
 
-    // For line-repetition practice, if recognition is plausibly close to the
-    // displayed prompt, prefer the expected text. This reduces frustrating ASR
-    // drift on short learner utterances while still preserving clearly different
-    // speech for evaluation.
-    const shouldSnapToExpected = Boolean(prompt && shouldUseExpectedTranscript(best.text, prompt));
-    const transcript = shouldSnapToExpected ? (prompt as string) : best.text;
+    // Snap-to-expected is only applied in practice mode to reduce ASR drift on
+    // short utterances. In assessment mode we always return the raw transcript.
+    const shouldSnapToExpected = !isAssessment && Boolean(effectivePrompt && shouldUseExpectedTranscript(best.text, effectivePrompt));
+    const transcript = shouldSnapToExpected ? (effectivePrompt as string) : best.text;
 
-    console.log("[Transcribe] selected:", best.model, "score:", best.score.toFixed(3), "text:", transcript);
+    console.log("[Transcribe] selected:", best.model, "score:", best.score.toFixed(3), "text:", transcript, "strict:", isAssessment);
     return NextResponse.json({
       transcript,
       rawTranscript: best.text,
       selectedModel: best.model,
       score: Number(best.score.toFixed(4)),
+      strict: isAssessment,
     });
   } catch (error) {
     console.error("[Transcribe] error:", error);
