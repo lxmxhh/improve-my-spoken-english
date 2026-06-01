@@ -28,8 +28,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-white text-gray-900">
+      <body className="min-h-full flex flex-col bg-white text-gray-900" suppressHydrationWarning>
         <BrowserWarning />
         <nav className="border-b border-gray-100 px-4 py-3 flex items-center justify-between max-w-2xl mx-auto w-full">
           <Link href="/" className="font-bold text-blue-600 text-sm tracking-tight">English Practice</Link>
