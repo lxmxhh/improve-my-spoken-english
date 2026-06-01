@@ -14,6 +14,18 @@ export interface PronunciationAssessment {
   }[];
 }
 
+export interface UserRecording {
+  url: string;
+  mimeType: string;
+  durationMs: number;
+}
+
+export interface CapturedAudio {
+  blob: Blob;
+  mimeType: string;
+  durationMs: number;
+}
+
 export interface ScriptTurn {
   speaker: "coach" | "user";
   text: string;

@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { PracticeMode, PronunciationAssessment } from "@/lib/types";
+import type { CapturedAudio, PracticeMode, PronunciationAssessment } from "@/lib/types";
 
 // Re-export for consumers that import from this module
 export type { PronunciationAssessment } from "@/lib/types";
 
 interface MicButtonProps {
-  onResult: (transcript: string, assessment?: PronunciationAssessment) => void | Promise<void>;
+  onResult: (
+    transcript: string,
+    assessment?: PronunciationAssessment,
+    audio?: CapturedAudio
+  ) => void | Promise<void>;
   onNoSpeech: () => void;
   disabled: boolean;
   mode?: PracticeMode;
@@ -138,8 +142,13 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
     }
   }
 
-  async function sendAudio(blob: Blob, fileName: string) {
+  async function sendAudio(blob: Blob, fileName: string, durationMs: number) {
     setState("processing");
+    const capturedAudio: CapturedAudio = {
+      blob,
+      mimeType: blob.type || "application/octet-stream",
+      durationMs,
+    };
 
     try {
       if (blob.size < MIN_AUDIO_BYTES) {
@@ -164,7 +173,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
           return;
         }
 
-        await onResult(data.transcript ?? "", data);
+        await onResult(data.transcript ?? "", data, capturedAudio);
         setState("idle");
       } else {
         // Practice mode: transcribe without snap-to-expected bias
@@ -181,7 +190,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
           return;
         }
 
-        await onResult(data.transcript.trim());
+        await onResult(data.transcript.trim(), undefined, capturedAudio);
         setState("idle");
       }
     } catch (err) {
@@ -202,7 +211,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
     stopStream();
 
     const blob = encodeWav(samplesRef.current, sampleRate);
-    await sendAudio(blob, "speech.wav");
+    await sendAudio(blob, "speech.wav", durationMs);
   }
 
   async function finalizeMediaRecorderRecording() {
@@ -213,7 +222,8 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
 
     const type = mediaRecorderRef.current?.mimeType || "audio/webm";
     const blob = new Blob(chunksRef.current, { type });
-    await sendAudio(blob, "speech.webm");
+    const durationMs = Date.now() - recordingStartedAtRef.current;
+    await sendAudio(blob, "speech.webm", durationMs);
   }
 
   async function startWorkletRecording(stream: MediaStream) {

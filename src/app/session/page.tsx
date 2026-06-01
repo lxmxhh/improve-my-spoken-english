@@ -8,7 +8,15 @@ import MicButton from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
 import { getImmediateScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
-import type { PracticeMode, PronunciationAssessment, Script, ScriptTurn, TurnResult } from "@/lib/types";
+import type {
+  CapturedAudio,
+  PracticeMode,
+  PronunciationAssessment,
+  Script,
+  ScriptTurn,
+  TurnResult,
+  UserRecording,
+} from "@/lib/types";
 import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
@@ -221,6 +229,8 @@ export default function SessionPage() {
   const [lastAssessment, setLastAssessment] = useState<PronunciationAssessment | null>(null);
   const [isTtsPlaying, setIsTtsPlaying] = useState(false);
   const [mode, setMode] = useState<PracticeMode>("practice");
+  const [userRecordings, setUserRecordings] = useState<Record<number, UserRecording>>({});
+  const userRecordingsRef = useRef<Record<number, UserRecording>>({});
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
@@ -244,6 +254,31 @@ export default function SessionPage() {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+  }, []);
+
+  const clearConversationReplay = useCallback(() => {
+    for (const recording of Object.values(userRecordingsRef.current)) {
+      URL.revokeObjectURL(recording.url);
+    }
+    userRecordingsRef.current = {};
+    setUserRecordings({});
+  }, []);
+
+  const saveUserRecording = useCallback((turnIndex: number, audio: CapturedAudio) => {
+    const recording: UserRecording = {
+      url: URL.createObjectURL(audio.blob),
+      mimeType: audio.mimeType,
+      durationMs: audio.durationMs,
+    };
+
+    setUserRecordings((current) => {
+      if (current[turnIndex]?.url) {
+        URL.revokeObjectURL(current[turnIndex].url);
+      }
+      const next = { ...current, [turnIndex]: recording };
+      userRecordingsRef.current = next;
+      return next;
+    });
   }, []);
 
   // Load script on mount
@@ -310,7 +345,7 @@ export default function SessionPage() {
 
   // Evaluate user speech
   const handleTranscript = useCallback(
-    async (transcript: string, assessment?: PronunciationAssessment) => {
+    async (transcript: string, assessment?: PronunciationAssessment, audio?: CapturedAudio) => {
       setLastTranscript(transcript);
       setLastAssessment(assessment ?? null);
 
@@ -318,6 +353,7 @@ export default function SessionPage() {
       if (!script) return;
       const expectedTurn = script.turns[currentScriptIndex];
       if (!expectedTurn || expectedTurn.speaker !== "user") return;
+      if (audio) saveUserRecording(currentScriptIndex, audio);
 
       dispatch({ type: "EVALUATING", value: true });
       try {
@@ -367,7 +403,7 @@ export default function SessionPage() {
         dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
       }
     },
-    [state]
+    [saveUserRecording, state]
   );
 
   const handleNoSpeech = useCallback(() => {
@@ -384,6 +420,9 @@ export default function SessionPage() {
 
   useEffect(() => {
     return () => {
+      for (const recording of Object.values(userRecordingsRef.current)) {
+        URL.revokeObjectURL(recording.url);
+      }
       if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
       manualTtsRef.current = null;
       if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -784,12 +823,19 @@ export default function SessionPage() {
             summary={state.summary}
             passedLines={passedLines}
             totalLines={totalLines}
+            script={script}
+            userRecordings={userRecordings}
+            onPlayCoach={speakLine}
             onNext={() => {
               clearSessionUiState();
+              clearConversationReplay();
               dispatch({ type: "RESET" });
               loadNextScript();
             }}
-            onDone={() => router.push("/")}
+            onDone={() => {
+              clearConversationReplay();
+              router.push("/");
+            }}
           />
         </div>
       </div>
