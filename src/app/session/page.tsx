@@ -12,6 +12,8 @@ import type {
   CapturedAudio,
   PracticeMode,
   PronunciationAssessment,
+  PronunciationCoachFeedback,
+  PronunciationCoachTip,
   Script,
   ScriptTurn,
   TurnResult,
@@ -20,6 +22,13 @@ import type {
 import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
+
+interface TipPracticeResult {
+  transcript: string;
+  assessment: PronunciationAssessment;
+  feedback?: PronunciationCoachFeedback;
+  loading: boolean;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +56,7 @@ type Action =
   | { type: "EVAL_RESULT"; passed: boolean; turnIndex: number }
   | { type: "PASS_HOLD"; turnIndex: number }
   | { type: "ADVANCE_AFTER_PASS" }
+  | { type: "PRACTICE_REPEAT_RESULT"; passed: boolean }
   | { type: "CLEAR_FEEDBACK" }
   | { type: "EVALUATING"; value: boolean }
   | { type: "TICK" }
@@ -164,31 +174,28 @@ function reducer(state: State, action: Action): State {
         pendingPassAdvance: false,
       };
     }
+    case "PRACTICE_REPEAT_RESULT":
+      return {
+        ...state,
+        evaluating: false,
+        pendingPassAdvance: true,
+        lastFeedback: action.passed ? "pass" : "fail",
+      };
     case "CLEAR_FEEDBACK":
       return { ...state, lastFeedback: null };
     case "EVAL_RESULT": {
-      const turns = state.script!.turns;
       if (action.passed || state.attempt === 1) {
-        // Advance to next turn
+        // The turn is complete, but stay on the answer page until the user continues.
         const result: TurnResult = {
           turnIndex: action.turnIndex,
           passed: action.passed,
         };
-        const results = [...state.results, result];
-        const next = state.currentScriptIndex + 1;
-        // Skip any leading coach turns — they'll render via COACH_DONE
-        // (actually coach turns render themselves; we just advance index)
-        if (next >= turns.length) {
-          return { ...state, results, stage: "summarizing", evaluating: false, lastFeedback: action.passed ? "pass" : "fail" };
-        }
         return {
           ...state,
-          results,
-          currentScriptIndex: next,
-          currentUserTurnPos: state.currentUserTurnPos + 1,
+          results: [...state.results, result],
           attempt: 0,
           evaluating: false,
-          pendingPassAdvance: false,
+          pendingPassAdvance: true,
           lastFeedback: action.passed ? "pass" : "fail",
         };
       } else {
@@ -223,11 +230,13 @@ export default function SessionPage() {
   const summarizingRef = useRef(false);
   const manualTtsRef = useRef<SpeechSynthesisUtterance | null>(null);
   const manualTtsFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [passAdvanceSec, setPassAdvanceSec] = useState<number | null>(null);
   const [textInput, setTextInput] = useState("");
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [lastAssessment, setLastAssessment] = useState<PronunciationAssessment | null>(null);
-  const [isTtsPlaying, setIsTtsPlaying] = useState(false);
+  const [coachFeedback, setCoachFeedback] = useState<PronunciationCoachFeedback | null>(null);
+  const [coachFeedbackLoading, setCoachFeedbackLoading] = useState(false);
+  const [tipPracticeResults, setTipPracticeResults] = useState<Record<string, TipPracticeResult>>({});
+  const [playingTtsSource, setPlayingTtsSource] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>("practice");
   const [userRecordings, setUserRecordings] = useState<Record<number, UserRecording>>({});
   const userRecordingsRef = useRef<Record<number, UserRecording>>({});
@@ -242,8 +251,10 @@ export default function SessionPage() {
     setTextInput("");
     setLastTranscript(null);
     setLastAssessment(null);
-    setPassAdvanceSec(null);
-    setIsTtsPlaying(false);
+    setCoachFeedback(null);
+    setCoachFeedbackLoading(false);
+    setTipPracticeResults({});
+    setPlayingTtsSource(null);
     if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
     manualTtsFallbackRef.current = null;
     manualTtsRef.current = null;
@@ -280,6 +291,78 @@ export default function SessionPage() {
       return next;
     });
   }, []);
+
+  const fetchCoachFeedback = useCallback(
+    async (
+      referenceText: string,
+      transcript: string,
+      assessment: PronunciationAssessment
+    ) => {
+      setCoachFeedbackLoading(true);
+      setCoachFeedback(null);
+      try {
+        const response = await fetch("/api/pronunciation-coach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referenceText, transcript, assessment }),
+        });
+        const data = await response.json() as PronunciationCoachFeedback & { error?: string };
+        if (response.ok && !data.error) {
+          setCoachFeedback(data);
+        }
+      } catch (error) {
+        console.warn("[coach-feedback] failed:", error);
+      } finally {
+        setCoachFeedbackLoading(false);
+      }
+    },
+    []
+  );
+
+  const getTipPracticeText = useCallback((tip: PronunciationCoachTip, fallbackText: string) => {
+    return tip.practiceText?.trim() || tip.target?.trim() || fallbackText;
+  }, []);
+
+  const handleTipPracticeResult = useCallback(
+    async (
+      key: string,
+      referenceText: string,
+      transcript: string,
+      assessment?: PronunciationAssessment
+    ) => {
+      if (!assessment) return;
+
+      setTipPracticeResults((current) => ({
+        ...current,
+        [key]: { transcript, assessment, loading: true },
+      }));
+
+      try {
+        const response = await fetch("/api/pronunciation-coach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referenceText, transcript, assessment }),
+        });
+        const feedback = await response.json() as PronunciationCoachFeedback & { error?: string };
+        setTipPracticeResults((current) => ({
+          ...current,
+          [key]: {
+            transcript,
+            assessment,
+            feedback: response.ok && !feedback.error ? feedback : undefined,
+            loading: false,
+          },
+        }));
+      } catch (error) {
+        console.warn("[tip-practice] coach feedback failed:", error);
+        setTipPracticeResults((current) => ({
+          ...current,
+          [key]: { transcript, assessment, loading: false },
+        }));
+      }
+    },
+    []
+  );
 
   // Load script on mount
   useEffect(() => {
@@ -354,6 +437,8 @@ export default function SessionPage() {
       const expectedTurn = script.turns[currentScriptIndex];
       if (!expectedTurn || expectedTurn.speaker !== "user") return;
       if (audio) saveUserRecording(currentScriptIndex, audio);
+      const referenceText = expectedTurn.hint ?? expectedTurn.text;
+      const isPracticeRepeat = mode === "practice" && state.pendingPassAdvance;
 
       dispatch({ type: "EVALUATING", value: true });
       try {
@@ -362,33 +447,29 @@ export default function SessionPage() {
         if (assessment) {
           // Assessment mode: Azure pronunciation result is authoritative
           pass = assessment.pass;
+          await fetchCoachFeedback(referenceText, transcript, assessment);
         } else {
           // Practice mode: semantic / lenient evaluation
           const res = await fetch("/api/evaluate-line", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expected: expectedTurn.text, actual: transcript }),
+            body: JSON.stringify({ expected: referenceText, actual: transcript }),
           });
           const data = await res.json() as { pass: boolean };
           pass = data.pass;
         }
 
+        if (isPracticeRepeat) {
+          dispatch({ type: "PRACTICE_REPEAT_RESULT", passed: pass });
+          return;
+        }
+
         if (pass) {
           dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex });
-          setPassAdvanceSec(2);
           if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
           if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
-          passAdvanceCountdownRef.current = setInterval(() => {
-            setPassAdvanceSec((s) => (s && s > 1 ? s - 1 : 1));
-          }, 1000);
-          passAdvanceTimeoutRef.current = setTimeout(() => {
-            dispatch({ type: "ADVANCE_AFTER_PASS" });
-            if (passAdvanceCountdownRef.current) {
-              clearInterval(passAdvanceCountdownRef.current);
-              passAdvanceCountdownRef.current = null;
-            }
-            setPassAdvanceSec(null);
-          }, 2000);
+          passAdvanceTimeoutRef.current = null;
+          passAdvanceCountdownRef.current = null;
           return;
         }
 
@@ -396,14 +477,17 @@ export default function SessionPage() {
         if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
         passAdvanceTimeoutRef.current = null;
         passAdvanceCountdownRef.current = null;
-        setPassAdvanceSec(null);
         dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex });
       } catch {
         // Fail-open: don't block the user on evaluation errors
-        dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
+        if (isPracticeRepeat) {
+          dispatch({ type: "PRACTICE_REPEAT_RESULT", passed: true });
+        } else {
+          dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
+        }
       }
     },
-    [saveUserRecording, state]
+    [fetchCoachFeedback, mode, saveUserRecording, state]
   );
 
   const handleNoSpeech = useCallback(() => {
@@ -434,14 +518,14 @@ export default function SessionPage() {
   }, []);
 
   // Helper: speak a line via TTS
-  const speakLine = useCallback(async (text: string) => {
+  const speakLine = useCallback(async (text: string, source = "manual") => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     const synth = window.speechSynthesis;
 
     // Stop anything currently playing
     if (synth.speaking || synth.pending) synth.cancel();
     if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
-    setIsTtsPlaying(true);
+    setPlayingTtsSource(source);
 
     const voices = await waitForSpeechVoices();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -462,7 +546,7 @@ export default function SessionPage() {
       manualTtsFallbackRef.current = null;
       if (startFallback) clearTimeout(startFallback);
       startFallback = null;
-      setIsTtsPlaying(false);
+      setPlayingTtsSource((current) => (current === source ? null : current));
     };
     const playMacFallback = async () => {
       if (fallbackStarted) return;
@@ -530,6 +614,7 @@ export default function SessionPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const { stage, script, elapsedSec, lastFeedback, attempt } = state;
+  const canRepeatPractice = mode === "practice" && state.pendingPassAdvance;
   const remaining = Math.max(0, SESSION_MAX_SEC - elapsedSec);
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
@@ -673,12 +758,12 @@ export default function SessionPage() {
                       </p>
                     </div>
                     <button
-                      onClick={() => speakLine(previousCoachTurn.text)}
-                      disabled={isTtsPlaying}
+                      onClick={() => speakLine(previousCoachTurn.text, "coach-question")}
+                      disabled={Boolean(playingTtsSource)}
                       title="Hear Alex again"
                       className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
                     >
-                      {isTtsPlaying ? (
+                      {playingTtsSource === "coach-question" ? (
                         <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
                       ) : "🔊"}
                     </button>
@@ -696,12 +781,12 @@ export default function SessionPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => speakLine(currentTurn.hint ?? currentTurn.text)}
-                    disabled={isTtsPlaying}
+                    onClick={() => speakLine(currentTurn.hint ?? currentTurn.text, "reference-answer")}
+                    disabled={Boolean(playingTtsSource)}
                     title="Hear it"
                     className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
                   >
-                    {isTtsPlaying ? (
+                    {playingTtsSource === "reference-answer" ? (
                       <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
                     ) : "🔊"}
                   </button>
@@ -713,10 +798,14 @@ export default function SessionPage() {
                 <p className={`text-sm font-medium ${lastFeedback === "pass" ? "text-emerald-600" : "text-amber-600"}`}>
                   {lastFeedback === "pass"
                     ? state.pendingPassAdvance
-                      ? `✓ Great! Next line in ${passAdvanceSec ?? 2}s...`
+                      ? canRepeatPractice
+                        ? "✓ Great! Practice again, or continue when ready."
+                        : "✓ Great! Review the feedback, then continue."
                       : "✓ Great!"
                     : attempt === 1
                     ? "Give it another try!"
+                    : state.pendingPassAdvance
+                    ? "Keep practicing, or continue when ready."
                     : "Moving on…"}
                 </p>
               )}
@@ -724,15 +813,38 @@ export default function SessionPage() {
               <MicButton
                 onResult={handleTranscript}
                 onNoSpeech={handleNoSpeech}
-                disabled={state.evaluating || state.pendingPassAdvance}
+                disabled={state.evaluating || (state.pendingPassAdvance && mode !== "practice")}
                 mode={mode}
                 referenceText={currentTurn.hint ?? currentTurn.text}
               />
 
+              {state.pendingPassAdvance && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    dispatch({ type: "ADVANCE_AFTER_PASS" });
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors"
+                >
+                  Continue
+                </button>
+              )}
+
               {lastTranscript && (
-                <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-sm text-blue-800">
-                  <span className="text-xs text-blue-400 mr-1">You said:</span>
-                  {lastTranscript}
+                <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
+                  <div>
+                    <span className="text-xs text-blue-400 mr-1">You said:</span>
+                    {lastTranscript}
+                  </div>
+                  {userRecordings[state.currentScriptIndex] && (
+                    <div className="mt-3">
+                      <audio
+                        controls
+                        src={userRecordings[state.currentScriptIndex].url}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -780,19 +892,122 @@ export default function SessionPage() {
                 </div>
               )}
 
+              {mode === "assessment" && (coachFeedbackLoading || coachFeedback) && (
+                <div className="w-full rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-400">
+                      AI Coach
+                    </p>
+                    {coachFeedbackLoading && (
+                      <span className="w-4 h-4 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </div>
+
+                  {coachFeedback ? (
+                    <div className="mt-2 flex flex-col gap-2">
+                      <p className="text-sm text-gray-800">{coachFeedback.summary}</p>
+                      <div className="flex flex-col gap-2">
+                        {coachFeedback.tips.map((tip, index) => (
+                          <div key={`${tip.type}-${index}`} className="rounded-xl bg-white/80 px-3 py-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400">
+                              {tip.type === "pronunciation" ? "Pronunciation" : "Naturalness"}
+                              {tip.target ? ` · ${tip.target}` : ""}
+                            </p>
+                            <p className="mt-1 text-sm leading-5 text-gray-700">{tip.advice}</p>
+                            {(() => {
+                              const key = `${state.currentScriptIndex}-${index}`;
+                              const practiceText = getTipPracticeText(tip, coachFeedback.retryPrompt);
+                              const practiceResult = tipPracticeResults[key];
+
+                              return (
+                                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-3">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400">
+                                        Follow-up practice
+                                      </p>
+                                      <p className="mt-1 text-sm font-medium leading-5 text-gray-800">
+                                        {practiceText}
+                                      </p>
+                                    </div>
+                                    <div className="sm:w-24">
+                                      <MicButton
+                                        onResult={(transcript, assessment) =>
+                                          handleTipPracticeResult(key, practiceText, transcript, assessment)
+                                        }
+                                        onNoSpeech={() => {}}
+                                        disabled={false}
+                                        mode="assessment"
+                                        referenceText={practiceText}
+                                        variant="compact"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {practiceResult && (
+                                    <div className="mt-3 flex flex-col gap-2 border-t border-indigo-100 pt-3">
+                                      <div className="grid grid-cols-4 gap-2 text-center">
+                                        {([
+                                          ["Pron.", practiceResult.assessment.pronunciationScore],
+                                          ["Acc.", practiceResult.assessment.accuracyScore],
+                                          ["Flu.", practiceResult.assessment.fluencyScore],
+                                          ["Comp.", practiceResult.assessment.completenessScore],
+                                        ] as [string, number][]).map(([label, score]) => (
+                                          <div key={label} className="rounded-lg bg-white px-2 py-1">
+                                            <div className="text-[9px] uppercase text-gray-400">{label}</div>
+                                            <div className={`text-xs font-bold ${
+                                              score >= 80 ? "text-emerald-700" : score >= 60 ? "text-amber-700" : "text-red-700"
+                                            }`}>{score}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <p className="text-xs text-gray-500">
+                                        You said: {practiceResult.transcript || "No transcript"}
+                                      </p>
+                                      {practiceResult.loading && (
+                                        <p className="text-xs text-indigo-500">Checking how to improve this practice...</p>
+                                      )}
+                                      {practiceResult.feedback && (
+                                        <div className="rounded-lg bg-white px-3 py-2">
+                                          <p className="text-xs font-medium text-gray-700">
+                                            {practiceResult.feedback.summary}
+                                          </p>
+                                          {practiceResult.feedback.tips[0] && (
+                                            <p className="mt-1 text-xs text-gray-600">
+                                              {practiceResult.feedback.tips[0].advice}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-indigo-600">{coachFeedback.retryPrompt}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-indigo-600">Thinking about your pronunciation...</p>
+                  )}
+                </div>
+              )}
+
               {/* Text input fallback */}
               <form onSubmit={handleTextSubmit} className="flex w-full gap-2 mt-1">
                 <input
                   type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
-                  disabled={state.evaluating || state.pendingPassAdvance}
+                  disabled={state.evaluating || (state.pendingPassAdvance && mode !== "practice")}
                   placeholder="Or type your answer here…"
                   className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-100 disabled:text-gray-400"
                 />
                 <button
                   type="submit"
-                  disabled={state.evaluating || state.pendingPassAdvance || !textInput.trim()}
+                  disabled={state.evaluating || (state.pendingPassAdvance && mode !== "practice") || !textInput.trim()}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
                 >
                   Send
@@ -825,7 +1040,8 @@ export default function SessionPage() {
             totalLines={totalLines}
             script={script}
             userRecordings={userRecordings}
-            onPlayCoach={speakLine}
+            playingTtsSource={playingTtsSource}
+            onPlayCoach={(text, source) => speakLine(text, source)}
             onNext={() => {
               clearSessionUiState();
               clearConversationReplay();

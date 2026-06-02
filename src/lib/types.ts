@@ -26,6 +26,19 @@ export interface CapturedAudio {
   durationMs: number;
 }
 
+export interface PronunciationCoachTip {
+  type: "pronunciation" | "naturalness";
+  target?: string;
+  advice: string;
+  practiceText?: string;
+}
+
+export interface PronunciationCoachFeedback {
+  summary: string;
+  tips: PronunciationCoachTip[];
+  retryPrompt: string;
+}
+
 export interface ScriptTurn {
   speaker: "coach" | "user";
   text: string;

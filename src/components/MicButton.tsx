@@ -16,6 +16,7 @@ interface MicButtonProps {
   disabled: boolean;
   mode?: PracticeMode;
   referenceText?: string;
+  variant?: "default" | "compact";
 }
 
 type MicState = "idle" | "listening" | "processing";
@@ -92,7 +93,14 @@ function encodeWav(samples: Float32Array[], sampleRate: number) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-export default function MicButton({ onResult, onNoSpeech, disabled, mode = "practice", referenceText }: MicButtonProps) {
+export default function MicButton({
+  onResult,
+  onNoSpeech,
+  disabled,
+  mode = "practice",
+  referenceText,
+  variant = "default",
+}: MicButtonProps) {
   const [micState, setMicState] = useState<MicState>("idle");
   const [countdown, setCountdown] = useState(AUTO_STOP_MS / 1000);
   const [recordingLimitSec, setRecordingLimitSec] = useState(AUTO_STOP_MS / 1000);
@@ -362,9 +370,10 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
 
   const isListening = micState === "listening";
   const isProcessing = micState === "processing";
+  const isCompact = variant === "compact";
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className={`flex flex-col items-center gap-2 ${isCompact ? "w-full" : ""}`}>
       {errorMsg && (
         <p className="text-xs text-red-500 text-center max-w-xs">{errorMsg}</p>
       )}
@@ -372,7 +381,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
         onClick={toggleListening}
         disabled={disabled || isProcessing}
         aria-label={isListening ? "Stop recording" : "Start recording"}
-        className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400 select-none touch-none ${
+        className={`relative ${isCompact ? "w-12 h-12" : "w-20 h-20"} rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400 select-none touch-none ${
           isListening
             ? "bg-red-500 text-white shadow-lg scale-110 ring-4 ring-red-300 ring-opacity-60"
             : isProcessing
@@ -383,12 +392,12 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
         }`}
       >
         {isProcessing ? (
-          <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg className={`${isCompact ? "w-5 h-5" : "w-8 h-8"} animate-spin`} fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         ) : (
-          <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+          <svg className={isCompact ? "w-5 h-5" : "w-8 h-8"} fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 1a4 4 0 00-4 4v7a4 4 0 008 0V5a4 4 0 00-4-4zm-1 18.93A8.001 8.001 0 014 12H2a10 10 0 0010 10v-2.07zm2 0V22a10 10 0 0010-10h-2a8.001 8.001 0 01-7 7.93z" />
           </svg>
         )}
@@ -398,7 +407,7 @@ export default function MicButton({ onResult, onNoSpeech, disabled, mode = "prac
       </button>
 
       {isListening && (
-        <div className="w-32 flex flex-col items-center gap-1">
+        <div className={`${isCompact ? "w-24" : "w-32"} flex flex-col items-center gap-1`}>
           <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div
               className="bg-red-500 h-1.5 rounded-full transition-all duration-1000"

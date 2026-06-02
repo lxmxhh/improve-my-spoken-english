@@ -8,7 +8,8 @@ interface SessionSummaryProps {
   totalLines: number;
   script: Script;
   userRecordings: Record<number, UserRecording>;
-  onPlayCoach: (text: string) => void;
+  playingTtsSource: string | null;
+  onPlayCoach: (text: string, source: string) => void;
   onNext: () => void;
   onDone: () => void;
 }
@@ -19,6 +20,7 @@ export default function SessionSummary({
   totalLines,
   script,
   userRecordings,
+  playingTtsSource,
   onPlayCoach,
   onNext,
   onDone,
@@ -50,6 +52,9 @@ export default function SessionSummary({
           {script.turns.map((turn, index) => {
             const recording = userRecordings[index];
             const isCoach = turn.speaker === "coach";
+            const coachSource = `summary-coach-${index}`;
+            const isCoachPlaying = playingTtsSource === coachSource;
+            const isTtsLocked = Boolean(playingTtsSource);
 
             return (
               <div
@@ -74,11 +79,16 @@ export default function SessionSummary({
                       {isCoach && (
                         <button
                           type="button"
-                          onClick={() => onPlayCoach(turn.text)}
-                          className="w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-600 flex items-center justify-center transition-colors text-base"
+                          onClick={() => onPlayCoach(turn.text, coachSource)}
+                          disabled={isTtsLocked}
+                          className="w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 disabled:hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-70 text-blue-600 flex items-center justify-center transition-colors text-base"
                           title="Play Alex"
                         >
-                          🔊
+                          {isCoachPlaying ? (
+                            <span className="h-4 w-4 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+                          ) : (
+                            "🔊"
+                          )}
                         </button>
                       )}
                     </div>
