@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
 import MicButton from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
-import { getImmediateScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
+import { getImmediateFileScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type {
   CapturedAudio,
@@ -243,7 +243,9 @@ export default function SessionPage() {
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    dispatch({ type: "SCRIPT_LOADED", script: getImmediateScript(category) });
+    void getImmediateFileScript(category).then((script) => {
+      dispatch({ type: "SCRIPT_LOADED", script });
+    });
     void refillScriptPool(category);
   }, []);
 

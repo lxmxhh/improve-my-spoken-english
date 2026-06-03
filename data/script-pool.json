@@ -1,0 +1,504 @@
+{
+  "Daily Life": [
+    {
+      "topic": "Morning Routines",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! What’s the first thing you do after waking up in the morning?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually check my phone and drink a big glass of water right away."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great start—hydration really helps your brain wake up faster!"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I feel more focused and less tired after drinking water."
+        },
+        {
+          "speaker": "coach",
+          "text": "Do you ever try adding a short stretch or deep breaths to your routine?"
+        },
+        {
+          "speaker": "user",
+          "text": "Not yet, but I’d like to try stretching for two minutes before breakfast."
+        },
+        {
+          "speaker": "coach",
+          "text": "Two minutes is perfect—you’ll notice more energy and better posture over time."
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks, Alex! I’ll begin tomorrow and tell you how it goes."
+        }
+      ]
+    },
+    {
+      "topic": "Morning Routines",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! What’s the first thing you do after waking up in the morning?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually check my phone and drink a glass of water right away."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great start! Do you ever try to avoid your phone for the first ten minutes?"
+        },
+        {
+          "speaker": "user",
+          "text": "Not really—I always scroll through messages before I even get out of bed."
+        },
+        {
+          "speaker": "coach",
+          "text": "What small change could make your mornings feel calmer and more focused?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe I could put my phone across the room and stretch for five minutes instead."
+        },
+        {
+          "speaker": "coach",
+          "text": "That sounds like a realistic and positive step—would you like to try it for three days?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I’ll start tomorrow and tell you how it goes on Thursday!"
+        }
+      ]
+    }
+  ],
+  "Work & Career": [
+    {
+      "topic": "Preparing for a job interview in English",
+      "category": "Work & Career",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Let's practice answering common interview questions in English today."
+        },
+        {
+          "speaker": "user",
+          "text": "That sounds helpful—I get nervous speaking about my experience in English."
+        },
+        {
+          "speaker": "coach",
+          "text": "Totally normal! We’ll start with one simple question: 'Tell me about yourself.'"
+        },
+        {
+          "speaker": "user",
+          "text": "Okay, I work as a graphic designer and I love creating user-friendly websites."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great start! Try adding why you enjoy it—like 'because I love solving visual problems.'"
+        },
+        {
+          "speaker": "user",
+          "text": "Because I love solving visual problems and seeing clients smile at the final design."
+        },
+        {
+          "speaker": "coach",
+          "text": "Perfect! That’s clear, personal, and shows your passion—well done!"
+        },
+        {
+          "speaker": "user",
+          "text": "Thank you! I feel more confident already and want to practice two more questions."
+        }
+      ]
+    },
+    {
+      "topic": "Preparing for a job interview in English",
+      "category": "Work & Career",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Let’s practice answering common interview questions—start with telling me about yourself."
+        },
+        {
+          "speaker": "user",
+          "text": "I’m a graphic designer with three years of experience and I love creating user-friendly websites."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great! Now try explaining why you want this specific job at our company."
+        },
+        {
+          "speaker": "user",
+          "text": "I admire your team’s creative projects and I really want to grow my skills here."
+        },
+        {
+          "speaker": "coach",
+          "text": "Perfect—now let’s work on handling a tough question like 'What is your biggest weakness?'"
+        },
+        {
+          "speaker": "user",
+          "text": "Sometimes I spend too much time perfecting small details instead of moving forward quickly."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s honest and thoughtful—now rephrase it to show how you’re improving that habit."
+        },
+        {
+          "speaker": "user",
+          "text": "Now I set time limits for tasks and ask teammates for feedback to stay on track."
+        }
+      ]
+    }
+  ],
+  "News & Society": [
+    {
+      "topic": "How cities are becoming more bike-friendly",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you see the news about new bike lanes in Madrid?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read that article last week and thought it was really interesting."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great! What do you think is the biggest benefit of adding more bike lanes?"
+        },
+        {
+          "speaker": "user",
+          "text": "I think it helps reduce traffic and makes air cleaner for everyone."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! And many people say cycling also improves their daily mood and health."
+        },
+        {
+          "speaker": "user",
+          "text": "That’s true—I tried biking to work once and felt much more energetic all day."
+        },
+        {
+          "speaker": "coach",
+          "text": "Awesome! Would you consider using a bike more often if your city added safe lanes?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, definitely—I just need safer paths and maybe a good helmet too."
+        }
+      ]
+    },
+    {
+      "topic": "How cities are becoming more bike-friendly",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you see the news about new bike lanes in Madrid last week?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read a short article — it said they added fifty kilometers of safe paths."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What do you think makes bike-friendly cities better for people?"
+        },
+        {
+          "speaker": "user",
+          "text": "Well, less traffic, cleaner air, and it’s cheaper than using cars or buses."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! And many people feel healthier and happier when they cycle regularly."
+        },
+        {
+          "speaker": "user",
+          "text": "I’d like to try biking to work, but I’m not confident on busy streets yet."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s completely normal — start with quiet streets and build confidence step by step."
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks, Alex! Next week I’ll ride just ten minutes and see how it goes."
+        }
+      ]
+    },
+    {
+      "topic": "Community gardens helping cities fight climate change",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey there! Did you hear about how community gardens are popping up in big cities lately?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read a short article about them helping reduce city heat and air pollution."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What surprised you most about how these gardens actually help the environment?"
+        },
+        {
+          "speaker": "user",
+          "text": "I didn’t know plants in small gardens could cool streets and absorb rainwater so well."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Even tiny green spaces make a real difference—especially for neighborhoods with few trees."
+        },
+        {
+          "speaker": "user",
+          "text": "True, and I think more people would join if they knew how easy it is to start."
+        },
+        {
+          "speaker": "coach",
+          "text": "You’re right—many groups offer free workshops and seed kits to welcome beginners like you."
+        },
+        {
+          "speaker": "user",
+          "text": "That sounds perfect—I’d love to volunteer this summer and practice English at the same time."
+        }
+      ]
+    }
+  ],
+  "Entertainment & Culture": [
+    {
+      "topic": "Favorite childhood movies",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey, what’s one movie you loved watching as a kid? I’d love to hear about it!"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Finding Nemo' because the story was fun and the fish were very colorful."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice! What character did you like most, and why do you remember them?"
+        },
+        {
+          "speaker": "user",
+          "text": "I loved Dory because she was funny, forgetful, and always tried her best to help friends."
+        },
+        {
+          "speaker": "coach",
+          "text": "What a lovely answer! Did you watch it in English or in your native language back then?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watched it in my native language first, but later I tried watching parts in English with subtitles."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s smart learning—subtitles really help! Do you still quote any lines from the movie today?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, sometimes I say 'Just keep swimming!' when I feel tired or need more motivation."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood cartoon and its cultural impact",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey! What’s one cartoon you loved watching as a kid in your country?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Dora the Explorer' because it taught me simple English words and fun songs."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s awesome—Dora was popular worldwide! Did you watch it in English or in your native language?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watched it in Spanish first, but later I tried the English version with subtitles."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great idea! Watching familiar shows in English helps your listening and builds confidence naturally."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I noticed my pronunciation improved when I repeated Dora’s phrases out loud."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Mimicking characters is a smart, low-pressure way to practice real speech."
+        },
+        {
+          "speaker": "user",
+          "text": "Now I even recommend it to my younger cousins who are starting to learn English."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood cartoon and its cultural impact",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey! What’s one cartoon you loved watching as a kid in your country?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Dora the Explorer' because it taught me simple English words and fun songs."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s awesome—Dora was popular worldwide! Did you watch it in English or in your native language?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watched it in Spanish first, but later I tried the English version with subtitles."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great idea! Subtitles help you connect sounds, words, and meaning—what was your favorite episode?"
+        },
+        {
+          "speaker": "user",
+          "text": "My favorite was the one where Dora finds her lost backpack with help from friends."
+        },
+        {
+          "speaker": "coach",
+          "text": "What life lesson do you think that episode taught you about teamwork or problem-solving?"
+        },
+        {
+          "speaker": "user",
+          "text": "It showed me that asking for help and staying positive makes hard things much easier."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood movies and why they still matter",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey! What’s one movie you loved as a kid and still remember clearly?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really loved 'Finding Nemo' because the ocean looked so colorful and exciting."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice! What part of the story made you feel happy or excited?"
+        },
+        {
+          "speaker": "user",
+          "text": "I felt happy when Nemo found his dad again after all that adventure."
+        },
+        {
+          "speaker": "coach",
+          "text": "Beautiful — family and courage are such powerful themes in films."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, and I also learned some English words from watching it with subtitles."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s fantastic! Did you ever try to repeat lines or talk like the characters?"
+        },
+        {
+          "speaker": "user",
+          "text": "Sometimes I practiced Marlin’s worried voice — it was fun and helped my speaking!"
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood movie",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! What’s one movie you loved watching as a child?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Finding Nemo' because the fish were funny and kind."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice! What part of the story made you smile the most?"
+        },
+        {
+          "speaker": "user",
+          "text": "When Dory says 'Just keep swimming' — it makes me feel strong and happy."
+        },
+        {
+          "speaker": "coach",
+          "text": "What a powerful message! Do you still watch it sometimes now?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I watch it with my little cousin and we both laugh at the same parts."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s wonderful — sharing movies builds such warm memories and language too!"
+        },
+        {
+          "speaker": "user",
+          "text": "I think watching films helps me learn real English words and natural expressions."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood movie",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! What’s one movie you loved watching as a child?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Finding Nemo' because the fish were funny and colorful."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice! What character did you relate to most, and why?"
+        },
+        {
+          "speaker": "user",
+          "text": "I liked Dory because she was kind and tried her best even when she forgot things."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s such a thoughtful answer—her positivity is truly inspiring, isn’t it?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, she taught me it’s okay to be different and still make friends."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Movies like that help us learn life lessons in fun ways."
+        },
+        {
+          "speaker": "user",
+          "text": "I think I’ll watch it again this weekend with my little cousin."
+        }
+      ]
+    }
+  ]
+}

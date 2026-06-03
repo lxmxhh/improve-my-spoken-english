@@ -9,8 +9,10 @@ export const SCRIPT_CATEGORIES = [
 ] as const;
 
 const CACHE_KEY = "esp_script_pool_v1";
+const FILE_MIGRATION_KEY = "esp_script_pool_file_migrated_v1";
 const PERFORMANCE_KEY = "esp_script_performance_v1";
 const MAX_CACHED_PER_CATEGORY = 25;
+export const MAX_GENERATED_VARIANTS_PER_TOPIC = 2;
 const REFILL_TARGET_PER_CATEGORY = 25;
 const REFILL_BATCH_SIZE = 3;
 const REVIEW_PROBABILITY = 0.35;
@@ -134,6 +136,12 @@ const BUILTIN_SCRIPTS: Script[] = [
 
 type ScriptPool = Partial<Record<string, Script[]>>;
 
+export interface AdminScriptRecord {
+  key: string;
+  source: "builtin" | "cached";
+  script: Script;
+}
+
 interface ScriptPerformance {
   attempts: number;
   scoreAvg: number;
@@ -155,7 +163,7 @@ function readPool(): ScriptPool {
     const pool: ScriptPool = {};
     for (const [category, scripts] of Object.entries(parsed as Record<string, unknown>)) {
       if (!Array.isArray(scripts)) continue;
-      pool[category] = scripts.filter(isScript);
+      pool[category] = scripts.filter(isValidScript);
     }
     return pool;
   } catch {
@@ -202,7 +210,7 @@ function isTurn(value: unknown): value is ScriptTurn {
   );
 }
 
-function isScript(value: unknown): value is Script {
+export function isValidScript(value: unknown): value is Script {
   if (!value || typeof value !== "object") return false;
   const script = value as Partial<Script>;
   return (
@@ -214,14 +222,22 @@ function isScript(value: unknown): value is Script {
   );
 }
 
-function scriptKey(script: Script) {
+export function getBuiltinScripts(): Script[] {
+  return BUILTIN_SCRIPTS;
+}
+
+export function getScriptKey(script: Script) {
   return `${script.category}::${script.topic}::${script.turns.map((turn) => turn.text).join("|")}`;
+}
+
+function topicKey(topic: string) {
+  return topic.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function trimPool(pool: ScriptPool): ScriptPool {
   const trimmed: ScriptPool = {};
   for (const category of SCRIPT_CATEGORIES) {
-    const scripts = (pool[category] ?? []).filter(isScript);
+    const scripts = (pool[category] ?? []).filter(isValidScript);
     trimmed[category] = scripts.slice(-MAX_CACHED_PER_CATEGORY);
   }
   return trimmed;
@@ -232,18 +248,18 @@ function randomItem<T>(items: T[]): T {
 }
 
 function getCachedScripts(category: string): Script[] {
-  return (readPool()[category] ?? []).filter(isScript);
+  return (readPool()[category] ?? []).filter(isValidScript);
 }
 
 function getCategoryScripts(category: string): Script[] {
   const pool = readPool();
-  const cached = (pool[category] ?? []).filter(isScript);
+  const cached = (pool[category] ?? []).filter(isValidScript);
   const builtin = BUILTIN_SCRIPTS.filter((script) => script.category === category);
   const merged: Script[] = [];
   const seen = new Set<string>();
 
   for (const script of [...cached, ...builtin]) {
-    const key = scriptKey(script);
+    const key = getScriptKey(script);
     if (seen.has(key)) continue;
     seen.add(key);
     merged.push(script);
@@ -257,7 +273,7 @@ function getReviewScript(category: string, candidates: Script[]): Script | null 
 
   const now = Date.now();
   const performance = readPerformance();
-  const candidateKeys = new Set(candidates.map(scriptKey));
+  const candidateKeys = new Set(candidates.map(getScriptKey));
   let pruned = false;
 
   for (const key of Object.keys(performance)) {
@@ -270,7 +286,7 @@ function getReviewScript(category: string, candidates: Script[]): Script | null 
   if (pruned) writePerformance(performance);
 
   const due = candidates
-    .map((script) => ({ script, stats: performance[scriptKey(script)] }))
+    .map((script) => ({ script, stats: performance[getScriptKey(script)] }))
     .filter(({ stats }) => (
       stats &&
       stats.attempts > 0 &&
@@ -294,19 +310,107 @@ export function getCachedScriptCount(category: string): number {
   return getCachedScripts(category).length;
 }
 
+async function fetchScriptRecords(): Promise<AdminScriptRecord[]> {
+  const response = await fetch("/api/script-pool");
+  if (!response.ok) throw new Error("Failed to load script pool");
+  const data = await response.json() as { records?: AdminScriptRecord[] };
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+export async function getFileAdminScriptRecords(): Promise<AdminScriptRecord[]> {
+  try {
+    return await fetchScriptRecords();
+  } catch {
+    return getAdminScriptRecords();
+  }
+}
+
+export async function upsertFileCachedScript(previousKey: string | null, script: Script): Promise<AdminScriptRecord[]> {
+  const response = await fetch("/api/script-pool", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "upsert", previousKey, script }),
+  });
+  if (!response.ok) throw new Error("Failed to save script");
+  const data = await response.json() as { records?: AdminScriptRecord[] };
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+export async function deleteFileCachedScript(key: string): Promise<AdminScriptRecord[]> {
+  const response = await fetch(`/api/script-pool?key=${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to delete script");
+  const data = await response.json() as { records?: AdminScriptRecord[] };
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+export async function migrateLocalStorageScriptsToFile(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (localStorage.getItem(FILE_MIGRATION_KEY) === "1") return false;
+
+  const localRecords = getAdminScriptRecords().filter((record) => record.source === "cached");
+  if (localRecords.length === 0) {
+    localStorage.setItem(FILE_MIGRATION_KEY, "1");
+    return false;
+  }
+
+  const byCategory = new Map<string, Script[]>();
+  for (const record of localRecords) {
+    const scripts = byCategory.get(record.script.category) ?? [];
+    scripts.push(record.script);
+    byCategory.set(record.script.category, scripts);
+  }
+
+  for (const [category, scripts] of byCategory.entries()) {
+    await fetch("/api/script-pool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "addGenerated", category, scripts }),
+    });
+  }
+
+  localStorage.setItem(FILE_MIGRATION_KEY, "1");
+  return true;
+}
+
+export async function getImmediateFileScript(category: string): Promise<Script> {
+  try {
+    const records = await fetchScriptRecords();
+    const candidates = records
+      .filter((record) => record.script.category === category)
+      .map((record) => record.script);
+    const reviewScript = getReviewScript(category, candidates);
+    if (reviewScript) return reviewScript;
+    return randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS);
+  } catch {
+    return getImmediateScript(category);
+  }
+}
+
 export function addCachedScripts(category: string, scripts: Script[]) {
-  const validScripts = scripts.filter((script) => isScript(script) && script.category === category);
+  const validScripts = scripts.filter((script) => isValidScript(script) && script.category === category);
   if (validScripts.length === 0) return;
 
   const pool = readPool();
-  const existing = (pool[category] ?? []).filter(isScript);
-  const seen = new Set(existing.map(scriptKey));
+  const existing = (pool[category] ?? []).filter(isValidScript);
+  const seen = new Set(existing.map(getScriptKey));
   const merged = [...existing];
+  const topicCounts = new Map<string, number>();
+
+  for (const script of existing) {
+    const key = topicKey(script.topic);
+    topicCounts.set(key, (topicCounts.get(key) ?? 0) + 1);
+  }
 
   for (const script of validScripts) {
-    const key = scriptKey(script);
+    const key = getScriptKey(script);
     if (seen.has(key)) continue;
+    const currentTopicKey = topicKey(script.topic);
+    if ((topicCounts.get(currentTopicKey) ?? 0) >= MAX_GENERATED_VARIANTS_PER_TOPIC) continue;
+
     seen.add(key);
+    topicCounts.set(currentTopicKey, (topicCounts.get(currentTopicKey) ?? 0) + 1);
     merged.push(script);
   }
 
@@ -314,12 +418,85 @@ export function addCachedScripts(category: string, scripts: Script[]) {
   writePool(pool);
 }
 
+export function getAdminScriptRecords(): AdminScriptRecord[] {
+  if (typeof window === "undefined") return [];
+
+  const records: AdminScriptRecord[] = [];
+  const seen = new Set<string>();
+  const pool = readPool();
+
+  for (const category of SCRIPT_CATEGORIES) {
+    for (const script of (pool[category] ?? []).filter(isValidScript)) {
+      const key = getScriptKey(script);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      records.push({ key, source: "cached", script });
+    }
+  }
+
+  for (const script of BUILTIN_SCRIPTS) {
+    const key = getScriptKey(script);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    records.push({ key, source: "builtin", script });
+  }
+
+  return records;
+}
+
+export function upsertCachedScript(previousKey: string | null, script: Script) {
+  if (typeof window === "undefined" || !isValidScript(script)) return;
+
+  const pool = readPool();
+  const nextKey = getScriptKey(script);
+
+  for (const category of SCRIPT_CATEGORIES) {
+    const existing = (pool[category] ?? []).filter(isValidScript);
+    pool[category] = existing.filter((item) => {
+      const key = getScriptKey(item);
+      return key !== previousKey && key !== nextKey;
+    });
+  }
+
+  const categoryScripts = (pool[script.category] ?? []).filter(isValidScript);
+  pool[script.category] = [...categoryScripts, script].slice(-MAX_CACHED_PER_CATEGORY);
+
+  if (previousKey && previousKey !== nextKey) {
+    const performance = readPerformance();
+    delete performance[previousKey];
+    writePerformance(performance);
+  }
+
+  writePool(pool);
+}
+
+export function deleteCachedScript(key: string) {
+  if (typeof window === "undefined") return;
+
+  const pool = readPool();
+  let changed = false;
+
+  for (const category of SCRIPT_CATEGORIES) {
+    const existing = (pool[category] ?? []).filter(isValidScript);
+    const next = existing.filter((script) => getScriptKey(script) !== key);
+    if (next.length !== existing.length) changed = true;
+    pool[category] = next;
+  }
+
+  if (!changed) return;
+
+  writePool(pool);
+  const performance = readPerformance();
+  delete performance[key];
+  writePerformance(performance);
+}
+
 export function recordScriptPerformance(script: Script, passedLines: number, totalLines: number) {
   if (typeof window === "undefined" || totalLines <= 0) return;
 
   const score = Math.max(0, Math.min(1, passedLines / totalLines));
   const performance = readPerformance();
-  const key = scriptKey(script);
+  const key = getScriptKey(script);
   const previous = performance[key];
   const scoreAvg = previous ? previous.scoreAvg * 0.7 + score * 0.3 : score;
 
@@ -343,7 +520,16 @@ function getReviewDelayMs(score: number) {
 export async function refillScriptPool(category: string, targetCount = REFILL_TARGET_PER_CATEGORY) {
   if (typeof window === "undefined" || refillInFlight) return;
 
-  const currentCount = getCachedScriptCount(category);
+  let currentCount = getCachedScriptCount(category);
+  try {
+    const records = await fetchScriptRecords();
+    currentCount = records.filter((record) => (
+      record.source === "cached" && record.script.category === category
+    )).length;
+  } catch {
+    currentCount = getCachedScriptCount(category);
+  }
+
   const needed = Math.min(REFILL_BATCH_SIZE, Math.max(0, targetCount - currentCount));
   if (needed === 0) return;
 
@@ -358,9 +544,18 @@ export async function refillScriptPool(category: string, targetCount = REFILL_TA
       });
       if (!response.ok) continue;
       const script = await response.json() as unknown;
-      if (isScript(script)) generated.push(script);
+      if (isValidScript(script)) generated.push(script);
     }
-    addCachedScripts(category, generated);
+    try {
+      const response = await fetch("/api/script-pool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addGenerated", category, scripts: generated }),
+      });
+      if (!response.ok) throw new Error("file script pool write failed");
+    } catch {
+      addCachedScripts(category, generated);
+    }
   } catch (error) {
     console.warn("[script-pool] refill failed:", error);
   } finally {
