@@ -927,6 +927,44 @@
           "text": "Definitely! I think I’d notice more jokes and feel nostalgic about my childhood."
         }
       ]
+    },
+    {
+      "topic": "Learning English through watching TV shows",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Have you ever tried watching an English TV show with subtitles to improve your listening?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I watched 'Friends' last month and understood about half of the jokes."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great progress! Which character’s accent did you find easiest to understand?"
+        },
+        {
+          "speaker": "user",
+          "text": "Ross — his voice is clear and he speaks slowly most of the time."
+        },
+        {
+          "speaker": "coach",
+          "text": "Nice choice! Try pausing and repeating one short line aloud after him today."
+        },
+        {
+          "speaker": "user",
+          "text": "Okay, I’ll repeat Ross’s line about dinosaurs tomorrow morning before coffee."
+        },
+        {
+          "speaker": "coach",
+          "text": "Perfect! Small daily practice builds confidence faster than long weekly study sessions."
+        },
+        {
+          "speaker": "user",
+          "text": "I feel more excited now — like learning English is fun, not just hard work."
+        }
+      ]
     }
   ]
 }

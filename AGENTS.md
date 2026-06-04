@@ -12,10 +12,16 @@ Always start the dev server on port **6688**:
 ```bash
 npm run dev -- -p 6688
 ```
+
+For cloud/server deployment, prefer production mode on port **6688**:
+
+```bash
+npm run build
+npm run start -- -p 6688
+```
 <!-- END:dev-server -->
 
 <!-- BEGIN:modification rules -->
 When you made any change, do not change irrelevant files.
 Always do TDD, always test after any change on code.
 <!-- END:modification rules -->
-
