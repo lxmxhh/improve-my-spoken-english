@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ai, AI_MODEL, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
 
 function normalize(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const completion = await ai.chat.completions.create({
+    const completion = await getAiClient().chat.completions.create({
       model: AI_MODEL,
       max_tokens: 20,
       messages: [

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ai, AI_MODEL, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import type { Script, ScriptTurn } from "@/lib/types";
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       throw new Error("AI_API_KEY is not configured");
     }
 
-    const completionPromise = ai.chat.completions.create({
+    const completionPromise = getAiClient().chat.completions.create({
       model: AI_MODEL,
       max_tokens: 360,
       response_format: { type: "json_object" },

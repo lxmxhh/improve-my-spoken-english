@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ai, AI_MODEL, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
 import type { Script } from "@/lib/types";
 
 function scriptToText(script: Script): string {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const completion = await ai.chat.completions.create({
+    const completion = await getAiClient().chat.completions.create({
       model: AI_MODEL,
       messages: [
         {

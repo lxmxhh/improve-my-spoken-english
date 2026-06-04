@@ -10,7 +10,13 @@ export const AI_API_KEY =
 
 export const hasAiApiKey = AI_API_KEY.trim().length > 0;
 
-export const ai = new OpenAI({
-  baseURL: AI_BASE_URL,
-  apiKey: AI_API_KEY || "missing-api-key",
-});
+export function getAiClient(): OpenAI {
+  if (!hasAiApiKey) {
+    throw new Error("AI_API_KEY is not configured");
+  }
+
+  return new OpenAI({
+    baseURL: AI_BASE_URL,
+    apiKey: AI_API_KEY,
+  });
+}

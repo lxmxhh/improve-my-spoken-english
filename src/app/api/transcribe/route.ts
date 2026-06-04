@@ -16,12 +16,19 @@ const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION ?? "";
 const AZURE_TRANSCRIBE_TIMEOUT_MS =
   Number(process.env.AZURE_TRANSCRIBE_TIMEOUT_MS) || 30_000;
 
-const groq = new OpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
-  apiKey: process.env.GROQ_API_KEY ?? "",
-});
-
 const MODELS = ["whisper-large-v3", "whisper-large-v3-turbo"] as const;
+
+function getGroqClient(): OpenAI {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY not configured");
+  }
+
+  return new OpenAI({
+    baseURL: "https://api.groq.com/openai/v1",
+    apiKey,
+  });
+}
 
 function normalizeText(s: string): string {
   return s
@@ -245,7 +252,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 async function transcribeWithModel(audio: File, prompt: string | null, model: (typeof MODELS)[number]) {
-  const transcription = await groq.audio.transcriptions.create({
+  const transcription = await getGroqClient().audio.transcriptions.create({
     file: audio,
     model,
     language: "en",
