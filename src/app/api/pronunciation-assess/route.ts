@@ -16,6 +16,15 @@ const ASSESSMENT_TIMEOUT_MS =
 const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY ?? "";
 const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION ?? "";
 
+function audioExtension(mimeType: string, fileName = "") {
+  const value = `${mimeType} ${fileName}`.toLowerCase();
+  if (value.includes("wav")) return "wav";
+  if (value.includes("mp4") || value.includes("m4a")) return "m4a";
+  if (value.includes("aac")) return "aac";
+  if (value.includes("ogg")) return "ogg";
+  return "webm";
+}
+
 interface WordAssessment {
   word: string;
   accuracyScore?: number;
@@ -48,7 +57,7 @@ export async function POST(request: Request) {
 
     await mkdir(TEMP_DIR, { recursive: true });
     const id = randomUUID();
-    inputPath = join(TEMP_DIR, `${id}.webm`);
+    inputPath = join(TEMP_DIR, `${id}.${audioExtension(audio.type, audio.name)}`);
     wavPath = join(TEMP_DIR, `${id}.wav`);
     await writeFile(inputPath, Buffer.from(await audio.arrayBuffer()));
 

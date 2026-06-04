@@ -75,6 +75,66 @@
           "text": "Yes, I’ll start tomorrow and tell you how it goes on Thursday!"
         }
       ]
+    },
+    {
+      "topic": "My Daily Routine",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi! Let's talk about your daily routine. What time do you usually wake up?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually wake up at seven in the morning.",
+          "hint": "I usually wake up at seven in the morning."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's a great start to the day! What do you do first after waking up?"
+        },
+        {
+          "speaker": "user",
+          "text": "First I brush my teeth and then I have breakfast.",
+          "hint": "First I brush my teeth and then I have breakfast."
+        },
+        {
+          "speaker": "coach",
+          "text": "Good habits! What do you normally eat for breakfast?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually eat toast and drink a cup of coffee.",
+          "hint": "I usually eat toast and drink a cup of coffee."
+        },
+        {
+          "speaker": "coach",
+          "text": "Sounds delicious! How do you get to work or school?"
+        },
+        {
+          "speaker": "user",
+          "text": "I take the subway. It takes about thirty minutes.",
+          "hint": "I take the subway. It takes about thirty minutes."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's quite a commute. What time do you usually finish your day?"
+        },
+        {
+          "speaker": "user",
+          "text": "I finish work at around six in the evening.",
+          "hint": "I finish work at around six in the evening."
+        },
+        {
+          "speaker": "coach",
+          "text": "And what do you like to do to relax in the evening?"
+        },
+        {
+          "speaker": "user",
+          "text": "I like to watch TV or read a book before going to bed.",
+          "hint": "I like to watch TV or read a book before going to bed."
+        }
+      ]
     }
   ],
   "Work & Career": [
@@ -267,6 +327,209 @@
         {
           "speaker": "user",
           "text": "That sounds perfect—I’d love to volunteer this summer and practice English at the same time."
+        }
+      ]
+    },
+    {
+      "topic": "Urban Green Spaces",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you see the recent news about cities planting more trees?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read that London wants to plant one million new trees by 2050."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! Why do you think green spaces matter so much in big cities?"
+        },
+        {
+          "speaker": "user",
+          "text": "They help clean air, reduce heat, and give people quiet places to relax outside."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! And studies show parks also improve mental health and community connections."
+        },
+        {
+          "speaker": "user",
+          "text": "I didn’t know that — maybe my city should build more small neighborhood gardens."
+        },
+        {
+          "speaker": "coach",
+          "text": "What’s one simple idea you’d suggest to your local council about green spaces?"
+        },
+        {
+          "speaker": "user",
+          "text": "I would say add benches and bike paths in new parks so everyone can enjoy them."
+        }
+      ]
+    },
+    {
+      "topic": "How cities are reducing plastic waste",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you see the news about Seoul banning single-use plastics in cafes?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read that article last week — it sounds really positive and practical."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! What do you think made this policy successful in South Korea?"
+        },
+        {
+          "speaker": "user",
+          "text": "I think strong public support and clear government guidelines helped people adapt quickly."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great point! How could your hometown apply a similar idea effectively?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe start with small shops and offer free reusable cups for loyal customers."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s creative and realistic — small steps often lead to big change!"
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks, Alex — now I feel more confident talking about real-world solutions."
+        }
+      ]
+    },
+    {
+      "topic": "A Recent News Story",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Let's discuss the news! Have you read or heard any interesting stories lately?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read about advances in artificial intelligence this week.",
+          "hint": "Yes, I read about advances in artificial intelligence this week."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's a hot topic! What did the story say?"
+        },
+        {
+          "speaker": "user",
+          "text": "It said that AI can now help doctors diagnose diseases more accurately.",
+          "hint": "It said that AI can now help doctors diagnose diseases more accurately."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's fascinating. How do you feel about AI being used in medicine?"
+        },
+        {
+          "speaker": "user",
+          "text": "I think it's very helpful, but doctors should still make the final decisions.",
+          "hint": "I think it's very helpful, but doctors should still make the final decisions."
+        },
+        {
+          "speaker": "coach",
+          "text": "Good point. Do you think this technology will change healthcare significantly?"
+        },
+        {
+          "speaker": "user",
+          "text": "Definitely. It could save a lot of lives by catching problems earlier.",
+          "hint": "Definitely. It could save a lot of lives by catching problems earlier."
+        },
+        {
+          "speaker": "coach",
+          "text": "Are there any concerns about AI that worry you?"
+        },
+        {
+          "speaker": "user",
+          "text": "I am a bit worried about privacy and how patient data is used.",
+          "hint": "I am a bit worried about privacy and how patient data is used."
+        }
+      ]
+    },
+    {
+      "topic": "How social media affects public opinion on climate change",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Let's talk about how social media shapes what people think about climate change."
+        },
+        {
+          "speaker": "user",
+          "text": "I think videos on Instagram make climate issues feel more real and urgent to young people."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's a great point—have you noticed any posts that changed your own view recently?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, a TikTok showing melting glaciers made me start recycling more at home."
+        },
+        {
+          "speaker": "coach",
+          "text": "Wonderful! Small actions really add up when many people join in."
+        },
+        {
+          "speaker": "user",
+          "text": "But sometimes I see opposite opinions online and I don’t know which facts are true."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s totally normal—checking trusted news sites helps separate facts from rumors."
+        },
+        {
+          "speaker": "user",
+          "text": "Next time I’ll look for BBC or Reuters before sharing anything about the environment."
+        }
+      ]
+    },
+    {
+      "topic": "How cities are reducing plastic waste",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you see the news about Seoul banning single-use plastics in cafes?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read that article last week and found it really inspiring and hopeful."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What part of the story do you think is most important for other cities?"
+        },
+        {
+          "speaker": "user",
+          "text": "I think the public education campaign helped people understand why the ban matters so much."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly — changing habits takes time, but awareness is always the first step forward."
+        },
+        {
+          "speaker": "user",
+          "text": "True, and I noticed many small shops started using reusable containers quite quickly."
+        },
+        {
+          "speaker": "coach",
+          "text": "Wonderful observation! How could your hometown apply a similar idea in daily life?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe we could begin with schools encouraging students to bring water bottles instead of plastic ones."
         }
       ]
     }
@@ -497,6 +760,171 @@
         {
           "speaker": "user",
           "text": "I think I’ll watch it again this weekend with my little cousin."
+        }
+      ]
+    },
+    {
+      "topic": "A Favorite Movie",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Let's talk about movies! What's a film you really enjoyed recently?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really enjoyed watching Interstellar. It was amazing.",
+          "hint": "I really enjoyed watching Interstellar. It was amazing."
+        },
+        {
+          "speaker": "coach",
+          "text": "Oh that's a classic! What did you like about it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I loved the story about space travel and the special effects were incredible.",
+          "hint": "I loved the story about space travel and the special effects were incredible."
+        },
+        {
+          "speaker": "coach",
+          "text": "Did any part of the movie surprise you?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, the ending was very unexpected and emotional.",
+          "hint": "Yes, the ending was very unexpected and emotional."
+        },
+        {
+          "speaker": "coach",
+          "text": "Would you recommend it to a friend? How would you describe it?"
+        },
+        {
+          "speaker": "user",
+          "text": "Absolutely! I would say it's a must-watch for anyone who loves science fiction.",
+          "hint": "Absolutely! I would say it's a must-watch for anyone who loves science fiction."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great recommendation. Do you have a favorite actor or director?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really like Christopher Nolan. He makes very creative and intelligent films.",
+          "hint": "I really like Christopher Nolan. He makes very creative and intelligent films."
+        }
+      ]
+    },
+    {
+      "topic": "How streaming changed the way we watch movies",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Let's talk about how streaming services changed movie watching habits."
+        },
+        {
+          "speaker": "user",
+          "text": "I used to go to cinemas, but now I watch most films at home on Netflix."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s true—streaming gives us more choice and lets us watch anytime we want."
+        },
+        {
+          "speaker": "user",
+          "text": "Sometimes I feel overwhelmed by so many shows and can’t decide what to watch."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s called ‘choice overload’—try picking just one genre you love each week."
+        },
+        {
+          "speaker": "user",
+          "text": "Good idea! Last week I watched a Korean drama and really enjoyed the storytelling."
+        },
+        {
+          "speaker": "coach",
+          "text": "Awesome! Watching shows in English—or other languages—really helps your listening skills too."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I pause often to understand new words, and it’s getting easier every day."
+        }
+      ]
+    },
+    {
+      "topic": "How streaming changed the way we watch TV shows",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Have you noticed how much easier it is to binge-watch your favorite series now?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I love watching three episodes in a row without waiting for weekly releases."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s true — streaming lets us choose when and where we enjoy our shows."
+        },
+        {
+          "speaker": "user",
+          "text": "Sometimes I even watch with English subtitles to improve my listening skills."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great idea! Subtitles help you connect spoken words with their spelling and meaning."
+        },
+        {
+          "speaker": "user",
+          "text": "I also pause and repeat funny lines to practice pronunciation and natural rhythm."
+        },
+        {
+          "speaker": "coach",
+          "text": "Brilliant — that kind of active listening really builds confidence and fluency."
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks, Alex! I feel more motivated to keep learning through something I love."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood movies",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey there! What’s one movie you loved watching as a kid?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really enjoyed 'Toy Story' because the toys came alive and had adventures."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s such a fun choice! What character did you like most and why?"
+        },
+        {
+          "speaker": "user",
+          "text": "I liked Buzz Lightyear because he was brave, funny, and believed he was a real space ranger."
+        },
+        {
+          "speaker": "coach",
+          "text": "Awesome! Did you ever pretend to be Buzz or play with toys like in the movie?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I made my own space missions with action figures and even wore a paper helmet!"
+        },
+        {
+          "speaker": "coach",
+          "text": "That sounds amazing—imagination is so powerful. Would you watch it again today?"
+        },
+        {
+          "speaker": "user",
+          "text": "Definitely! I think I’d notice more jokes and feel nostalgic about my childhood."
         }
       ]
     }

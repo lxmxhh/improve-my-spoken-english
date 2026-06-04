@@ -60,14 +60,35 @@ export function waitForSpeechVoices(timeoutMs = 1500): Promise<SpeechSynthesisVo
   });
 }
 
-export async function playMacSpeechAudio(text: string, voice = "Samantha"): Promise<void> {
+interface ServerSpeechOptions {
+  signal?: AbortSignal;
+}
+
+function createAbortError(): Error {
+  if (typeof DOMException !== "undefined") {
+    return new DOMException("TTS playback was aborted", "AbortError");
+  }
+  const error = new Error("TTS playback was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+export async function playServerSpeechAudio(
+  text: string,
+  voice = "Samantha",
+  options: ServerSpeechOptions = {}
+): Promise<void> {
+  if (options.signal?.aborted) throw createAbortError();
+
   if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
   const response = await fetch("/api/tts-say", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, voice }),
+    signal: options.signal,
   });
 
+  if (options.signal?.aborted) throw createAbortError();
   if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
   if (!response.ok) {
     const err = await response.text().catch(() => "");
@@ -78,22 +99,50 @@ export async function playMacSpeechAudio(text: string, voice = "Samantha"): Prom
   if (DEBUG_TTS) console.log("[TTS] blob size:", blob.size, "type:", blob.type);
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  audio.preload = "auto";
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener("abort", onAbort);
+      callback();
+    };
+
+    const onAbort = () => {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      settle(() => reject(createAbortError()));
+    };
+
+    if (options.signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    options.signal?.addEventListener("abort", onAbort, { once: true });
     audio.onended = () => {
       if (DEBUG_TTS) console.log("[TTS] audio ended");
-      resolve();
+      settle(resolve);
     };
     audio.onerror = (e) => {
       console.error("[TTS] audio.onerror:", e);
-      reject(new Error("Failed to play audio"));
+      settle(() => reject(new Error("Failed to play audio")));
     };
     audio.play()
       .then(() => {
         if (DEBUG_TTS) console.log("[TTS] audio.play() ok");
       })
-      .catch((e) => { console.error("[TTS] audio.play() rejected:", e); reject(e); });
+      .catch((e) => {
+        console.error("[TTS] audio.play() rejected:", e);
+        settle(() => reject(e));
+      });
   }).finally(() => {
     URL.revokeObjectURL(url);
   });
 }
+
+export const playMacSpeechAudio = playServerSpeechAudio;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
+import { pickEnglishVoice, playServerSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 interface CoachLineProps {
   text: string;
@@ -17,6 +17,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     doneRef.current = false;
     const words = text.split(/\s+/).filter(Boolean).length;
     const estimatedMs = Math.max(3000, words * 450);
+    const serverWatchdogMs = Math.max(30000, estimatedMs + 15000);
     let forceAdvance: ReturnType<typeof setTimeout> | null = null;
 
     const finish = () => {
@@ -30,27 +31,37 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     };
     finishRef.current = finish;
 
-    forceAdvance = setTimeout(finish, estimatedMs + 5000);
-
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      // TTS not available — just advance after a short delay
-      const t = setTimeout(() => {
-        finish();
-      }, 1500);
-      return () => {
-        clearTimeout(t);
-        if (forceAdvance) clearTimeout(forceAdvance);
-      };
-    }
-
-    const synth = window.speechSynthesis;
+    const synth = typeof window === "undefined" ? null : window.speechSynthesis;
+    const serverTtsAbort = new AbortController();
     let cancelled = false;
     let fallback: ReturnType<typeof setTimeout> | null = null;
     let startFallback: ReturnType<typeof setTimeout> | null = null;
+    let serverTimeout: ReturnType<typeof setTimeout> | null = null;
     let started = false;
-    let fallbackStarted = false;
 
     async function speak() {
+      try {
+        serverTimeout = setTimeout(() => serverTtsAbort.abort(), serverWatchdogMs);
+        await playServerSpeechAudio(text, "Samantha", { signal: serverTtsAbort.signal });
+        if (serverTimeout) clearTimeout(serverTimeout);
+        serverTimeout = null;
+        if (cancelled) return;
+        finish();
+        return;
+      } catch (error) {
+        if (serverTimeout) clearTimeout(serverTimeout);
+        serverTimeout = null;
+        if (cancelled) return;
+        console.warn("[TTS] server coach audio failed; falling back to browser voice", error);
+      }
+
+      if (cancelled) return;
+      if (!synth) {
+        finish();
+        return;
+      }
+
+      forceAdvance = setTimeout(finish, estimatedMs + 5000);
       const voices = await waitForSpeechVoices();
       if (cancelled) return;
 
@@ -68,22 +79,6 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       }
       utteranceRef.current = utterance;
 
-      const playMacFallback = async () => {
-        if (fallbackStarted || cancelled) return;
-        fallbackStarted = true;
-        synth.cancel();
-        if (fallback) clearTimeout(fallback);
-        fallback = null;
-        try {
-          await Promise.race([
-            playMacSpeechAudio(text, "Samantha"),
-            new Promise<void>((resolve) => setTimeout(resolve, estimatedMs + 2000)),
-          ]);
-        } finally {
-          finish();
-        }
-      };
-
       utterance.onstart = () => {
         started = true;
         if (startFallback) clearTimeout(startFallback);
@@ -92,14 +87,18 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       utterance.onend = finish;
       utterance.onerror = () => {
         if (!started) {
-          void playMacFallback();
+          synth.cancel();
+          finish();
         } else {
           finish();
         }
       };
 
       startFallback = setTimeout(() => {
-        if (!started) void playMacFallback();
+        if (!started) {
+          synth.cancel();
+          finish();
+        }
       }, 1200);
       fallback = setTimeout(() => {
         synth.cancel();
@@ -113,12 +112,14 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
 
     return () => {
       cancelled = true;
+      serverTtsAbort.abort();
+      if (serverTimeout) clearTimeout(serverTimeout);
       if (fallback) clearTimeout(fallback);
       if (startFallback) clearTimeout(startFallback);
       if (forceAdvance) clearTimeout(forceAdvance);
       finishRef.current = () => {};
       utteranceRef.current = null;
-      synth.cancel();
+      synth?.cancel();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);

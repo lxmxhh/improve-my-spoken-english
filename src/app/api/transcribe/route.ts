@@ -172,10 +172,19 @@ async function convertToWav(bytes: ArrayBuffer, extension = "webm"): Promise<Buf
   }
 }
 
-async function transcribeWithAzure(bytes: ArrayBuffer, mimeType: string): Promise<string> {
+function audioExtension(mimeType: string, fileName = "") {
+  const value = `${mimeType} ${fileName}`.toLowerCase();
+  if (value.includes("wav")) return "wav";
+  if (value.includes("mp4") || value.includes("m4a")) return "m4a";
+  if (value.includes("aac")) return "aac";
+  if (value.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+async function transcribeWithAzure(bytes: ArrayBuffer, mimeType: string, fileName = ""): Promise<string> {
   if (!AZURE_SPEECH_KEY || !AZURE_SPEECH_REGION) return "";
 
-  const extension = mimeType.includes("wav") ? "wav" : "webm";
+  const extension = audioExtension(mimeType, fileName);
   const wav = await convertToWav(bytes, extension);
   const speechConfig = sdk.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION);
   speechConfig.speechRecognitionLanguage = "en-US";
@@ -290,14 +299,14 @@ export async function POST(request: Request) {
     }
 
     const bytes = await audio.arrayBuffer();
-    const fileName = audio.name || "speech.webm";
     const mimeType = audio.type || "audio/webm";
+    const fileName = audio.name || `speech.${audioExtension(mimeType)}`;
 
     console.log("[Transcribe] mode:", mode, "audio size:", audio.size, "type:", mimeType, "prompt:", effectivePrompt?.slice(0, 60));
 
     if (!effectivePrompt) {
       try {
-        const azureTranscript = await transcribeWithAzure(bytes, mimeType);
+        const azureTranscript = await transcribeWithAzure(bytes, mimeType, fileName);
         if (hasSpokenWords(azureTranscript)) {
           console.log("[Transcribe] selected: azure text:", azureTranscript);
           return NextResponse.json({

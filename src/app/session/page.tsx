@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
 import MicButton from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
-import { getImmediateFileScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
+import { getBuiltinScripts, getImmediateFileScript, getImmediateScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type {
   CapturedAudio,
@@ -19,7 +19,7 @@ import type {
   TurnResult,
   UserRecording,
 } from "@/lib/types";
-import { pickEnglishVoice, playMacSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
+import { pickEnglishVoice, playServerSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
 
 const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
 
@@ -96,22 +96,29 @@ function extractKeywords(script: Script): string[] {
 const CATEGORIES = [...SCRIPT_CATEGORIES];
 const SESSION_MAX_SEC = 300;
 
+function createInitialState(): State {
+  const script =
+    getBuiltinScripts().find((item) => item.category === CATEGORIES[0]) ??
+    getBuiltinScripts()[0];
+  return {
+    stage: "warmup",
+    script,
+    userTurnIndices: getUserTurnIndices(script.turns),
+    currentUserTurnPos: 0,
+    currentScriptIndex: 0,
+    attempt: 0,
+    results: [],
+    elapsedSec: 0,
+    evaluating: false,
+    summary: "",
+    lastFeedback: null,
+    pendingPassAdvance: false,
+  };
+}
+
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
-const initial: State = {
-  stage: "loading",
-  script: null,
-  userTurnIndices: [],
-  currentUserTurnPos: 0,
-  currentScriptIndex: 0,
-  attempt: 0,
-  results: [],
-  elapsedSec: 0,
-  evaluating: false,
-  summary: "",
-  lastFeedback: null,
-  pendingPassAdvance: false,
-};
+const initial: State = createInitialState();
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -243,9 +250,14 @@ export default function SessionPage() {
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    void getImmediateFileScript(category).then((script) => {
-      dispatch({ type: "SCRIPT_LOADED", script });
-    });
+    dispatch({ type: "SCRIPT_LOADED", script: getImmediateScript(category) });
+    void getImmediateFileScript(category)
+      .then((script) => {
+        dispatch({ type: "SCRIPT_LOADED", script });
+      })
+      .catch((error) => {
+        console.warn("[script-pool] file script load failed:", error);
+      });
     void refillScriptPool(category);
   }, []);
 
@@ -521,25 +533,15 @@ export default function SessionPage() {
 
   // Helper: speak a line via TTS
   const speakLine = useCallback(async (text: string, source = "manual") => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
 
-    // Stop anything currently playing
-    if (synth.speaking || synth.pending) synth.cancel();
+    if (synth?.speaking || synth?.pending) synth.cancel();
     if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
     setPlayingTtsSource(source);
 
-    const voices = await waitForSpeechVoices();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.85;
-    const enVoice = pickEnglishVoice(voices);
-    if (enVoice) { utterance.voice = enVoice; utterance.lang = enVoice.lang; }
-    if (DEBUG_TTS) console.log("[TTS] speaking with:", enVoice?.name, enVoice?.lang);
-    manualTtsRef.current = utterance;
     let intentionalCancel = false;
     let started = false;
-    let fallbackStarted = false;
     let startFallback: ReturnType<typeof setTimeout> | null = null;
 
     const finish = () => {
@@ -550,22 +552,28 @@ export default function SessionPage() {
       startFallback = null;
       setPlayingTtsSource((current) => (current === source ? null : current));
     };
-    const playMacFallback = async () => {
-      if (fallbackStarted) return;
-      fallbackStarted = true;
-      intentionalCancel = true;
-      synth.cancel();
-      if (manualTtsFallbackRef.current) clearTimeout(manualTtsFallbackRef.current);
-      manualTtsFallbackRef.current = null;
-      if (DEBUG_TTS) console.log("[TTS] Web Speech did not start; using macOS say audio");
-      try {
-        await playMacSpeechAudio(text, "Samantha");
-      } catch (error) {
-        console.error("[TTS] macOS audio fallback failed", error);
-      } finally {
-        finish();
-      }
-    };
+
+    try {
+      await playServerSpeechAudio(text, "Samantha");
+      finish();
+      return;
+    } catch (error) {
+      console.warn("[TTS] server audio failed; falling back to browser voice", error);
+    }
+
+    if (!synth) {
+      finish();
+      return;
+    }
+
+    const voices = await waitForSpeechVoices();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.85;
+    const enVoice = pickEnglishVoice(voices);
+    if (enVoice) { utterance.voice = enVoice; utterance.lang = enVoice.lang; }
+    if (DEBUG_TTS) console.log("[TTS] speaking with browser voice:", enVoice?.name, enVoice?.lang);
+    manualTtsRef.current = utterance;
     utterance.onstart = () => {
       started = true;
       if (startFallback) clearTimeout(startFallback);
@@ -578,7 +586,8 @@ export default function SessionPage() {
         return;
       }
       if (!started) {
-        void playMacFallback();
+        synth.cancel();
+        finish();
       } else {
         console.error("[TTS] onerror", e.error);
         finish();
@@ -587,7 +596,11 @@ export default function SessionPage() {
     const words = text.split(" ").length;
     const estimatedMs = Math.max(2500, words * 420);
     startFallback = setTimeout(() => {
-      if (!started) void playMacFallback();
+      if (!started) {
+        intentionalCancel = true;
+        synth.cancel();
+        finish();
+      }
     }, 1200);
     manualTtsFallbackRef.current = setTimeout(() => {
       intentionalCancel = true;

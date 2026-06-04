@@ -21,6 +21,9 @@ interface MicButtonProps {
 
 type MicState = "idle" | "listening" | "processing";
 type CaptureMode = "worklet" | "media-recorder";
+type WindowWithWebKitAudio = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
 
 const AUTO_STOP_MS = 10_000;
 const MIN_RECORDING_MS = 800;
@@ -91,6 +94,56 @@ function encodeWav(samples: Float32Array[], sampleRate: number) {
   }
 
   return new Blob([buffer], { type: "audio/wav" });
+}
+
+function getAudioContextConstructor() {
+  if (typeof window === "undefined") return null;
+  return window.AudioContext ?? (window as WindowWithWebKitAudio).webkitAudioContext ?? null;
+}
+
+function getBestMediaRecorderMimeType() {
+  if (typeof window === "undefined" || !("MediaRecorder" in window)) return "";
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/aac",
+  ];
+
+  return candidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? "";
+}
+
+function getAudioFileName(mimeType: string) {
+  if (mimeType.includes("wav")) return "speech.wav";
+  if (mimeType.includes("mp4")) return "speech.m4a";
+  if (mimeType.includes("aac")) return "speech.aac";
+  if (mimeType.includes("ogg")) return "speech.ogg";
+  return "speech.webm";
+}
+
+async function getMicrophoneStream() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia unavailable");
+  }
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name !== "OverconstrainedError" && name !== "ConstraintNotSatisfiedError") {
+      throw error;
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true });
+  }
 }
 
 export default function MicButton({
@@ -228,14 +281,23 @@ export default function MicButton({
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const type = mediaRecorderRef.current?.mimeType || "audio/webm";
+    const type = mediaRecorderRef.current?.mimeType || chunksRef.current[0]?.type || "audio/webm";
     const blob = new Blob(chunksRef.current, { type });
     const durationMs = Date.now() - recordingStartedAtRef.current;
-    await sendAudio(blob, "speech.webm", durationMs);
+    await sendAudio(blob, getAudioFileName(type), durationMs);
   }
 
   async function startWorkletRecording(stream: MediaStream) {
-    const audioContext = new AudioContext();
+    const AudioContextCtor = getAudioContextConstructor();
+    if (!AudioContextCtor || !("AudioWorkletNode" in window)) {
+      throw new Error("AudioWorklet is unavailable");
+    }
+
+    const audioContext = new AudioContextCtor();
+    if (!audioContext.audioWorklet) {
+      throw new Error("audioWorklet is unavailable");
+    }
+
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
@@ -259,11 +321,11 @@ export default function MicButton({
   }
 
   function startMediaRecorderRecording(stream: MediaStream) {
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : MediaRecorder.isTypeSupported("audio/webm")
-      ? "audio/webm"
-      : "";
+    if (!("MediaRecorder" in window)) {
+      throw new Error("MediaRecorder is unavailable");
+    }
+
+    const mimeType = getBestMediaRecorderMimeType();
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
@@ -307,14 +369,7 @@ export default function MicButton({
     if (stateRef.current !== "idle") return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      const stream = await getMicrophoneStream();
       streamRef.current = stream;
 
       try {
@@ -348,6 +403,8 @@ export default function MicButton({
       stopStream();
       if (name === "NotAllowedError") {
         setErrorMsg("Microphone permission denied. Please allow access and try again.");
+      } else if (name === "Error" || name === "NotFoundError" || name === "NotReadableError") {
+        setErrorMsg("Microphone is unavailable. Check browser permission and device settings.");
       } else {
         setErrorMsg(`Microphone error: ${name || "unknown"}`);
       }

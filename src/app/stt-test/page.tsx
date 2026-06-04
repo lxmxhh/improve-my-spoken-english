@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 
 type RecordingState = "idle" | "recording" | "transcribing";
 type RecordingMode = "worklet" | "media-recorder";
+type WindowWithWebKitAudio = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
 
 interface TranscribeResponse {
   transcript?: string;
@@ -90,6 +93,56 @@ function formatBytes(bytes: number) {
 
 function formatSeconds(ms: number) {
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function getAudioContextConstructor() {
+  if (typeof window === "undefined") return null;
+  return window.AudioContext ?? (window as WindowWithWebKitAudio).webkitAudioContext ?? null;
+}
+
+function getBestMediaRecorderMimeType() {
+  if (typeof window === "undefined" || !("MediaRecorder" in window)) return "";
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/aac",
+  ];
+
+  return candidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? "";
+}
+
+function getAudioFileName(mimeType: string) {
+  if (mimeType.includes("wav")) return "speech.wav";
+  if (mimeType.includes("mp4")) return "speech.m4a";
+  if (mimeType.includes("aac")) return "speech.aac";
+  if (mimeType.includes("ogg")) return "speech.ogg";
+  return "speech.webm";
+}
+
+async function getMicrophoneStream() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia unavailable");
+  }
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name !== "OverconstrainedError" && name !== "ConstraintNotSatisfiedError") {
+      throw error;
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true });
+  }
 }
 
 export default function SttTestPage() {
@@ -227,9 +280,8 @@ export default function SttTestPage() {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const durationMs = Date.now() - startedAtRef.current;
-    const blob = new Blob(chunksRef.current, {
-      type: mediaRecorderRef.current?.mimeType || "audio/webm",
-    });
+    const type = mediaRecorderRef.current?.mimeType || chunksRef.current[0]?.type || "audio/webm";
+    const blob = new Blob(chunksRef.current, { type });
     setElapsedMs(durationMs);
     setAudioInfo({
       size: blob.size,
@@ -248,11 +300,20 @@ export default function SttTestPage() {
     }
 
     replaceAudioUrl(URL.createObjectURL(blob));
-    await transcribe(blob, "speech.webm");
+    await transcribe(blob, getAudioFileName(type));
   }
 
   async function startWorkletRecording(stream: MediaStream) {
-    const audioContext = new AudioContext();
+    const AudioContextCtor = getAudioContextConstructor();
+    if (!AudioContextCtor || !("AudioWorkletNode" in window)) {
+      throw new Error("AudioWorklet is unavailable");
+    }
+
+    const audioContext = new AudioContextCtor();
+    if (!audioContext.audioWorklet) {
+      throw new Error("audioWorklet is unavailable");
+    }
+
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
@@ -276,11 +337,11 @@ export default function SttTestPage() {
   }
 
   function startMediaRecorderRecording(stream: MediaStream) {
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : MediaRecorder.isTypeSupported("audio/webm")
-      ? "audio/webm"
-      : "";
+    if (!("MediaRecorder" in window)) {
+      throw new Error("MediaRecorder is unavailable");
+    }
+
+    const mimeType = getBestMediaRecorderMimeType();
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
@@ -306,14 +367,7 @@ export default function SttTestPage() {
     replaceAudioUrl(null);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      const stream = await getMicrophoneStream();
       streamRef.current = stream;
 
       if (mode === "worklet") {
