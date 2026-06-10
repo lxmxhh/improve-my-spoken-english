@@ -14,6 +14,45 @@ export interface PronunciationAssessment {
   }[];
 }
 
+export type ConnectedSpeechLinkType =
+  | "consonant-vowel"
+  | "vowel-vowel"
+  | "same-consonant"
+  | "reduction";
+
+export type IntonationContour = "falling" | "rising" | "fall-rise" | "rise-fall";
+
+export interface ConnectedSpeechGuide {
+  text: string;
+  focusWords: {
+    word: string;
+    reason: string;
+  }[];
+  weakForms: {
+    word: string;
+    weakForm: string;
+    strongForm?: string;
+    reason: string;
+  }[];
+  linkedPhrases: {
+    text: string;
+    cue: string;
+    type: ConnectedSpeechLinkType;
+  }[];
+  intonation: {
+    contour: IntonationContour;
+    tonalWord?: string;
+    reason: string;
+  };
+  teachingPrompt: string;
+}
+
+export interface ConnectedSpeechAnalysis {
+  topIssue: "pronunciation" | "linking" | "weak-forms" | "rhythm" | "intonation" | null;
+  priorityReason: string;
+  suggestedPracticeText?: string;
+}
+
 export interface UserRecording {
   url: string;
   mimeType: string;
@@ -43,6 +82,7 @@ export interface ScriptTurn {
   speaker: "coach" | "user";
   text: string;
   hint?: string;
+  flowGuide?: ConnectedSpeechGuide;
 }
 
 export interface Script {

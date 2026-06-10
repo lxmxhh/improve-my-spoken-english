@@ -57,8 +57,8 @@ export async function POST(request: Request) {
 
     await mkdir(TEMP_DIR, { recursive: true });
     const id = randomUUID();
-    inputPath = join(TEMP_DIR, `${id}.${audioExtension(audio.type, audio.name)}`);
-    wavPath = join(TEMP_DIR, `${id}.wav`);
+    inputPath = join(TEMP_DIR, `${id}.input.${audioExtension(audio.type, audio.name)}`);
+    wavPath = join(TEMP_DIR, `${id}.output.wav`);
     await writeFile(inputPath, Buffer.from(await audio.arrayBuffer()));
 
     await execFileAsync("ffmpeg", [

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
+import FlowGuide from "@/components/FlowGuide";
 import MicButton from "@/components/MicButton";
 import SessionSummary from "@/components/SessionSummary";
-import { getBuiltinScripts, getImmediateFileScript, getImmediateScript, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES } from "@/lib/script-pool";
+import { getBuiltinScripts, getImmediateFileScript, getImmediateScript, getScriptKey, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES, upsertFileCachedScript } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type {
   CapturedAudio,
+  ConnectedSpeechGuide,
   PracticeMode,
   PronunciationAssessment,
   PronunciationCoachFeedback,
@@ -25,7 +27,7 @@ const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
 
 interface TipPracticeResult {
   transcript: string;
-  assessment: PronunciationAssessment;
+  assessment?: PronunciationAssessment;
   feedback?: PronunciationCoachFeedback;
   loading: boolean;
 }
@@ -57,9 +59,10 @@ type Action =
   | { type: "PASS_HOLD"; turnIndex: number }
   | { type: "ADVANCE_AFTER_PASS" }
   | { type: "PRACTICE_REPEAT_RESULT"; passed: boolean }
+  | { type: "FLOW_GUIDE_READY"; turnIndex: number; guide: ConnectedSpeechGuide }
   | { type: "CLEAR_FEEDBACK" }
   | { type: "EVALUATING"; value: boolean }
-  | { type: "TICK" }
+  | { type: "TICK"; enforceLimit: boolean }
   | { type: "SUMMARY_READY"; summary: string }
   | { type: "RESET" };
 
@@ -93,6 +96,22 @@ function extractKeywords(script: Script): string[] {
     .map(([w]) => w);
 }
 
+function getReferenceText(turn?: ScriptTurn) {
+  if (!turn) return "";
+  return turn.hint ?? turn.text;
+}
+
+function getPreviousCoachLine(turns: ScriptTurn[], currentScriptIndex: number) {
+  return turns
+    .slice(0, currentScriptIndex)
+    .reverse()
+    .find((turn) => turn.speaker === "coach")?.text ?? "";
+}
+
+function getFlowGuideKey(referenceText: string, previousCoachLine: string) {
+  return `${referenceText}\n---\n${previousCoachLine}`;
+}
+
 const CATEGORIES = [...SCRIPT_CATEGORIES];
 const SESSION_MAX_SEC = 300;
 
@@ -123,6 +142,9 @@ const initial: State = createInitialState();
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "SCRIPT_LOADED": {
+      if (state.stage !== "warmup" && state.stage !== "loading") {
+        return state;
+      }
       const indices = getUserTurnIndices(action.script.turns);
       return {
         ...state,
@@ -188,6 +210,20 @@ function reducer(state: State, action: Action): State {
         pendingPassAdvance: true,
         lastFeedback: action.passed ? "pass" : "fail",
       };
+    case "FLOW_GUIDE_READY": {
+      if (!state.script) return state;
+      const turn = state.script.turns[action.turnIndex];
+      if (!turn || turn.speaker !== "user") return state;
+      return {
+        ...state,
+        script: {
+          ...state.script,
+          turns: state.script.turns.map((item, index) => (
+            index === action.turnIndex ? { ...item, flowGuide: action.guide } : item
+          )),
+        },
+      };
+    }
     case "CLEAR_FEEDBACK":
       return { ...state, lastFeedback: null };
     case "EVAL_RESULT": {
@@ -212,7 +248,7 @@ function reducer(state: State, action: Action): State {
     }
     case "TICK": {
       const elapsed = state.elapsedSec + 1;
-      if (elapsed >= SESSION_MAX_SEC && state.stage === "conversation") {
+      if (action.enforceLimit && elapsed >= SESSION_MAX_SEC && state.stage === "conversation") {
         return { ...state, elapsedSec: elapsed, stage: "summarizing" };
       }
       return { ...state, elapsedSec: elapsed };
@@ -246,7 +282,14 @@ export default function SessionPage() {
   const [playingTtsSource, setPlayingTtsSource] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>("practice");
   const [userRecordings, setUserRecordings] = useState<Record<number, UserRecording>>({});
+  const [flowGuides, setFlowGuides] = useState<Record<string, ConnectedSpeechGuide | null>>({});
+  const [flowGuideLoadingKeys, setFlowGuideLoadingKeys] = useState<Record<string, boolean>>({});
   const userRecordingsRef = useRef<Record<number, UserRecording>>({});
+  const flowGuidesRef = useRef<Record<string, ConnectedSpeechGuide | null>>({});
+  const flowGuideLoadingKeysRef = useRef<Record<string, boolean>>({});
+  const scriptWithFlowGuidesRef = useRef<Script | null>(initial.script);
+  const flowGuideSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flowGuideSaveInFlightRef = useRef(false);
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
@@ -310,7 +353,8 @@ export default function SessionPage() {
     async (
       referenceText: string,
       transcript: string,
-      assessment: PronunciationAssessment
+      assessment?: PronunciationAssessment,
+      connectedSpeechGuide?: ConnectedSpeechGuide | null
     ) => {
       setCoachFeedbackLoading(true);
       setCoachFeedback(null);
@@ -318,7 +362,12 @@ export default function SessionPage() {
         const response = await fetch("/api/pronunciation-coach", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ referenceText, transcript, assessment }),
+          body: JSON.stringify({
+            referenceText,
+            transcript,
+            ...(assessment ? { assessment } : {}),
+            ...(connectedSpeechGuide ? { connectedSpeechGuide } : {}),
+          }),
         });
         const data = await response.json() as PronunciationCoachFeedback & { error?: string };
         if (response.ok && !data.error) {
@@ -337,6 +386,104 @@ export default function SessionPage() {
     return tip.practiceText?.trim() || tip.target?.trim() || fallbackText;
   }, []);
 
+  const scheduleFlowGuideScriptSave = useCallback(() => {
+    if (flowGuideSaveTimeoutRef.current) {
+      clearTimeout(flowGuideSaveTimeoutRef.current);
+    }
+
+    const saveWhenReady = async () => {
+      if (flowGuideSaveInFlightRef.current) {
+        flowGuideSaveTimeoutRef.current = setTimeout(() => {
+          void saveWhenReady();
+        }, 800);
+        return;
+      }
+
+      const script = scriptWithFlowGuidesRef.current;
+      if (!script) return;
+
+      flowGuideSaveInFlightRef.current = true;
+      try {
+        await upsertFileCachedScript(getScriptKey(script), script);
+      } catch (error) {
+        console.warn("[flow-guide] script save failed:", error);
+      } finally {
+        flowGuideSaveInFlightRef.current = false;
+      }
+    };
+
+    flowGuideSaveTimeoutRef.current = setTimeout(() => {
+      void saveWhenReady();
+    }, 800);
+  }, []);
+
+  const prefetchFlowGuide = useCallback((referenceText: string, previousCoachLine: string, turnIndex: number) => {
+    const key = getFlowGuideKey(referenceText, previousCoachLine);
+    if (
+      Object.prototype.hasOwnProperty.call(flowGuidesRef.current, key) ||
+      flowGuideLoadingKeysRef.current[key]
+    ) {
+      return;
+    }
+
+    flowGuideLoadingKeysRef.current = { ...flowGuideLoadingKeysRef.current, [key]: true };
+    setFlowGuideLoadingKeys((current) => ({ ...current, [key]: true }));
+
+    const loadFlowGuide = async () => {
+      try {
+        const response = await fetch("/api/connected-speech-guide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: referenceText,
+            previousCoachLine,
+            level: "B1",
+          }),
+        });
+        const data = await response.json() as ConnectedSpeechGuide & { error?: string };
+        const guide = response.ok && !data.error ? data : null;
+
+        flowGuidesRef.current = { ...flowGuidesRef.current, [key]: guide };
+        setFlowGuides((current) => ({ ...current, [key]: guide }));
+
+        if (guide) {
+          const currentScript = scriptWithFlowGuidesRef.current;
+          const turn = currentScript?.turns[turnIndex];
+          if (
+            currentScript &&
+            turn?.speaker === "user" &&
+            getFlowGuideKey(getReferenceText(turn), getPreviousCoachLine(currentScript.turns, turnIndex)) === key
+          ) {
+            const nextScript: Script = {
+              ...currentScript,
+              turns: currentScript.turns.map((item, index) => (
+                index === turnIndex ? { ...item, flowGuide: guide } : item
+              )),
+            };
+            scriptWithFlowGuidesRef.current = nextScript;
+            dispatch({ type: "FLOW_GUIDE_READY", turnIndex, guide });
+            scheduleFlowGuideScriptSave();
+          }
+        }
+      } catch (error) {
+        console.warn("[flow-guide] failed:", error);
+        flowGuidesRef.current = { ...flowGuidesRef.current, [key]: null };
+        setFlowGuides((current) => ({ ...current, [key]: null }));
+      } finally {
+        const nextLoading = { ...flowGuideLoadingKeysRef.current };
+        delete nextLoading[key];
+        flowGuideLoadingKeysRef.current = nextLoading;
+        setFlowGuideLoadingKeys((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+      }
+    };
+
+    void loadFlowGuide();
+  }, [scheduleFlowGuideScriptSave]);
+
   const handleTipPracticeResult = useCallback(
     async (
       key: string,
@@ -344,8 +491,6 @@ export default function SessionPage() {
       transcript: string,
       assessment?: PronunciationAssessment
     ) => {
-      if (!assessment) return;
-
       setTipPracticeResults((current) => ({
         ...current,
         [key]: { transcript, assessment, loading: true },
@@ -355,7 +500,11 @@ export default function SessionPage() {
         const response = await fetch("/api/pronunciation-coach", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ referenceText, transcript, assessment }),
+          body: JSON.stringify({
+            referenceText,
+            transcript,
+            ...(assessment ? { assessment } : {}),
+          }),
         });
         const feedback = await response.json() as PronunciationCoachFeedback & { error?: string };
         setTipPracticeResults((current) => ({
@@ -383,15 +532,39 @@ export default function SessionPage() {
     loadNextScript();
   }, [loadNextScript]);
 
+  useEffect(() => {
+    if (!state.script) return;
+    scriptWithFlowGuidesRef.current = state.script;
+
+    const seededGuides: Record<string, ConnectedSpeechGuide | null> = {};
+    state.script.turns.forEach((turn, index) => {
+      if (turn.speaker !== "user" || !turn.flowGuide) return;
+      const key = getFlowGuideKey(
+        getReferenceText(turn),
+        getPreviousCoachLine(state.script!.turns, index)
+      );
+      seededGuides[key] = turn.flowGuide;
+    });
+
+    if (Object.keys(seededGuides).length === 0) return;
+    flowGuidesRef.current = { ...flowGuidesRef.current, ...seededGuides };
+    const timeout = setTimeout(() => {
+      setFlowGuides((current) => ({ ...current, ...seededGuides }));
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [state.script]);
+
   // Timer during conversation
   useEffect(() => {
     if (state.stage === "conversation") {
-      timerRef.current = setInterval(() => dispatch({ type: "TICK" }), 1000);
+      timerRef.current = setInterval(() => {
+        dispatch({ type: "TICK", enforceLimit: mode === "assessment" });
+      }, 1000);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [state.stage]);
+  }, [mode, state.stage]);
 
   // Trigger summary generation
   const runSummarize = useCallback(async () => {
@@ -451,7 +624,9 @@ export default function SessionPage() {
       const expectedTurn = script.turns[currentScriptIndex];
       if (!expectedTurn || expectedTurn.speaker !== "user") return;
       if (audio) saveUserRecording(currentScriptIndex, audio);
-      const referenceText = expectedTurn.hint ?? expectedTurn.text;
+      const referenceText = getReferenceText(expectedTurn);
+      const previousCoachLine = getPreviousCoachLine(script.turns, currentScriptIndex);
+      const connectedSpeechGuide = flowGuides[getFlowGuideKey(referenceText, previousCoachLine)] ?? null;
       const isPracticeRepeat = mode === "practice" && state.pendingPassAdvance;
 
       dispatch({ type: "EVALUATING", value: true });
@@ -461,7 +636,7 @@ export default function SessionPage() {
         if (assessment) {
           // Assessment mode: Azure pronunciation result is authoritative
           pass = assessment.pass;
-          await fetchCoachFeedback(referenceText, transcript, assessment);
+          await fetchCoachFeedback(referenceText, transcript, assessment, connectedSpeechGuide);
         } else {
           // Practice mode: semantic / lenient evaluation
           const res = await fetch("/api/evaluate-line", {
@@ -471,6 +646,7 @@ export default function SessionPage() {
           });
           const data = await res.json() as { pass: boolean };
           pass = data.pass;
+          await fetchCoachFeedback(referenceText, transcript, undefined, connectedSpeechGuide);
         }
 
         if (isPracticeRepeat) {
@@ -501,12 +677,25 @@ export default function SessionPage() {
         }
       }
     },
-    [fetchCoachFeedback, mode, saveUserRecording, state]
+    [fetchCoachFeedback, flowGuides, mode, saveUserRecording, state]
   );
 
   const handleNoSpeech = useCallback(() => {
     // Just reset — let user try again, don't count as attempt
   }, []);
+
+  useEffect(() => {
+    if (!state.script) return;
+
+    state.script.turns.forEach((turn, index) => {
+      if (turn.speaker !== "user") return;
+      prefetchFlowGuide(
+        getReferenceText(turn),
+        getPreviousCoachLine(state.script!.turns, index),
+        index
+      );
+    });
+  }, [prefetchFlowGuide, state.script]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -528,6 +717,7 @@ export default function SessionPage() {
       }
       if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
       if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
+      if (flowGuideSaveTimeoutRef.current) clearTimeout(flowGuideSaveTimeoutRef.current);
     };
   }, []);
 
@@ -724,20 +914,27 @@ export default function SessionPage() {
     const progress = totalUserTurns > 0
       ? Math.round((state.currentUserTurnPos / totalUserTurns) * 100)
       : 0;
+    const referenceText = isUserTurn ? getReferenceText(currentTurn) : "";
+    const previousCoachLine = isUserTurn ? previousCoachTurn?.text ?? "" : "";
+    const flowGuideKey = referenceText ? getFlowGuideKey(referenceText, previousCoachLine) : "";
+    const currentFlowGuide = flowGuideKey ? flowGuides[flowGuideKey] : null;
+    const flowGuideLoading = Boolean(flowGuideKey && flowGuideLoadingKeys[flowGuideKey]);
 
     return (
       <div className="min-h-screen flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+        <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-xs text-gray-400 uppercase tracking-wide">{script.category}</span>
             <span className="font-semibold text-gray-800 text-sm">{script.topic}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`font-mono text-sm font-bold ${remaining <= 60 ? "text-red-500" : "text-gray-600"}`}>
-              {mm}:{ss}
-            </span>
-          </div>
+          {mode === "assessment" && (
+            <div className="flex items-center gap-3">
+              <span className={`font-mono text-sm font-bold ${remaining <= 60 ? "text-red-500" : "text-gray-600"}`}>
+                {mm}:{ss}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Progress bar */}
@@ -792,11 +989,11 @@ export default function SessionPage() {
                   <div className="flex-1 text-center">
                     <p className="text-xs text-gray-400 mb-1">You can say:</p>
                     <p className="text-gray-800 font-medium leading-relaxed">
-                      {currentTurn.hint ?? currentTurn.text}
+                      {referenceText}
                     </p>
                   </div>
                   <button
-                    onClick={() => speakLine(currentTurn.hint ?? currentTurn.text, "reference-answer")}
+                    onClick={() => speakLine(referenceText, "reference-answer")}
                     disabled={Boolean(playingTtsSource)}
                     title="Hear it"
                     className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
@@ -807,6 +1004,10 @@ export default function SessionPage() {
                   </button>
                 </div>
               </div>
+
+              {(currentFlowGuide || flowGuideLoading) && (
+                <FlowGuide guide={currentFlowGuide} loading={flowGuideLoading} />
+              )}
 
               {/* Feedback */}
               {lastFeedback && (
@@ -830,7 +1031,7 @@ export default function SessionPage() {
                 onNoSpeech={handleNoSpeech}
                 disabled={state.evaluating || (state.pendingPassAdvance && mode !== "practice")}
                 mode={mode}
-                referenceText={currentTurn.hint ?? currentTurn.text}
+                referenceText={referenceText}
               />
 
               {state.pendingPassAdvance && (
@@ -907,7 +1108,7 @@ export default function SessionPage() {
                 </div>
               )}
 
-              {mode === "assessment" && (coachFeedbackLoading || coachFeedback) && (
+              {(coachFeedbackLoading || coachFeedback) && (
                 <div className="w-full rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-indigo-400">
@@ -952,7 +1153,7 @@ export default function SessionPage() {
                                         }
                                         onNoSpeech={() => {}}
                                         disabled={false}
-                                        mode="assessment"
+                                        mode={mode}
                                         referenceText={practiceText}
                                         variant="compact"
                                       />
@@ -961,21 +1162,23 @@ export default function SessionPage() {
 
                                   {practiceResult && (
                                     <div className="mt-3 flex flex-col gap-2 border-t border-indigo-100 pt-3">
-                                      <div className="grid grid-cols-4 gap-2 text-center">
-                                        {([
-                                          ["Pron.", practiceResult.assessment.pronunciationScore],
-                                          ["Acc.", practiceResult.assessment.accuracyScore],
-                                          ["Flu.", practiceResult.assessment.fluencyScore],
-                                          ["Comp.", practiceResult.assessment.completenessScore],
-                                        ] as [string, number][]).map(([label, score]) => (
-                                          <div key={label} className="rounded-lg bg-white px-2 py-1">
-                                            <div className="text-[9px] uppercase text-gray-400">{label}</div>
-                                            <div className={`text-xs font-bold ${
-                                              score >= 80 ? "text-emerald-700" : score >= 60 ? "text-amber-700" : "text-red-700"
-                                            }`}>{score}</div>
-                                          </div>
-                                        ))}
-                                      </div>
+                                      {practiceResult.assessment && (
+                                        <div className="grid grid-cols-4 gap-2 text-center">
+                                          {([
+                                            ["Pron.", practiceResult.assessment.pronunciationScore],
+                                            ["Acc.", practiceResult.assessment.accuracyScore],
+                                            ["Flu.", practiceResult.assessment.fluencyScore],
+                                            ["Comp.", practiceResult.assessment.completenessScore],
+                                          ] as [string, number][]).map(([label, score]) => (
+                                            <div key={label} className="rounded-lg bg-white px-2 py-1">
+                                              <div className="text-[9px] uppercase text-gray-400">{label}</div>
+                                              <div className={`text-xs font-bold ${
+                                                score >= 80 ? "text-emerald-700" : score >= 60 ? "text-amber-700" : "text-red-700"
+                                              }`}>{score}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                       <p className="text-xs text-gray-500">
                                         You said: {practiceResult.transcript || "No transcript"}
                                       </p>
