@@ -10,6 +10,16 @@ function scriptToText(script: Script): string {
 
 const FALLBACK_SUMMARY =
   "Great effort today! Keep practicing every day and your English will keep improving. You're doing amazing!";
+const SUMMARY_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("summary timeout")), timeoutMs);
+    }),
+  ]);
+}
 
 export async function POST(req: NextRequest) {
   const {
@@ -24,12 +34,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const completion = await getAiClient().chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: "user",
-          content: `Here is a conversation script the user just practiced:
+    const completion = await withTimeout(
+      getAiClient().chat.completions.create({
+        model: AI_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: `Here is a conversation script the user just practiced:
 
 ${scriptToText(script)}
 
@@ -41,9 +52,11 @@ Generate a brief end-of-session summary with:
 3. One encouraging closing sentence
 
 Reply in plain text, not JSON. Keep it concise and friendly.`,
-        },
-      ],
-    });
+          },
+        ],
+      }),
+      SUMMARY_TIMEOUT_MS
+    );
 
     const summary =
       completion.choices[0]?.message?.content?.trim() ?? FALLBACK_SUMMARY;

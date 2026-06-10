@@ -114,6 +114,29 @@ function getFlowGuideKey(referenceText: string, previousCoachLine: string) {
 
 const CATEGORIES = [...SCRIPT_CATEGORIES];
 const SESSION_MAX_SEC = 300;
+const SUMMARY_TIMEOUT_MS = 12_000;
+
+const FALLBACK_SESSION_SUMMARY = "Great job! Keep practicing every day!";
+
+async function fetchSessionSummary(script: Script, passedLines: number, totalLines: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUMMARY_TIMEOUT_MS);
+
+  try {
+    const res = await fetch("/api/summarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ script, passedLines, totalLines }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) return FALLBACK_SESSION_SUMMARY;
+    const data = await res.json() as { summary?: string };
+    return data.summary?.trim() || FALLBACK_SESSION_SUMMARY;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function createInitialState(): State {
   const script =
@@ -589,22 +612,21 @@ export default function SessionPage() {
     };
 
     try {
-      const res = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: state.script, passedLines, totalLines }),
-      });
-      const { summary } = await res.json();
+      const summary = await fetchSessionSummary(state.script, passedLines, totalLines);
       session.summary = summary;
       dispatch({ type: "SUMMARY_READY", summary });
     } catch {
-      session.summary = "Great job! Keep practicing every day!";
+      session.summary = FALLBACK_SESSION_SUMMARY;
       dispatch({ type: "SUMMARY_READY", summary: session.summary });
     }
 
-    saveSession(session);
-    computeAndUpdateStreak(session.id);
-    recordScriptPerformance(state.script, passedLines, totalLines);
+    try {
+      saveSession(session);
+      computeAndUpdateStreak(session.id);
+      recordScriptPerformance(state.script, passedLines, totalLines);
+    } catch (error) {
+      console.warn("[session-summary] failed to persist session:", error);
+    }
   }, [state.script, state.userTurnIndices, state.results, state.elapsedSec]);
 
   useEffect(() => {

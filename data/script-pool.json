@@ -3691,44 +3691,6 @@
       ]
     },
     {
-      "topic": "Community gardens helping urban neighborhoods thrive",
-      "category": "News & Society",
-      "turns": [
-        {
-          "speaker": "coach",
-          "text": "Have you heard about the new community garden project downtown?"
-        },
-        {
-          "speaker": "user",
-          "text": "Yes, I saw a short article about it last week online."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s great! What did you find most interesting about the project?"
-        },
-        {
-          "speaker": "user",
-          "text": "I liked how neighbors work together to grow fresh vegetables and share them."
-        },
-        {
-          "speaker": "coach",
-          "text": "Exactly — teamwork and local food access are really important benefits."
-        },
-        {
-          "speaker": "user",
-          "text": "I think more cities should support gardens like this one."
-        },
-        {
-          "speaker": "coach",
-          "text": "Would you ever volunteer at a community garden yourself?"
-        },
-        {
-          "speaker": "user",
-          "text": "I would love to try, but I’m not sure what tasks beginners usually do."
-        }
-      ]
-    },
-    {
       "topic": "How cities are becoming more bike-friendly",
       "category": "News & Society",
       "turns": [
@@ -4879,6 +4841,287 @@
           "text": "Thanks, Alex! Next week I’ll visit the nearest garden and say hello in English."
         }
       ]
+    },
+    {
+      "topic": "Community gardens helping urban neighborhoods thrive",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Have you heard about the new community garden project downtown?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I saw a short article about it last week online.",
+          "flowGuide": {
+            "text": "Yes, I saw a short article about it last week online.",
+            "focusWords": [
+              {
+                "word": "Yes",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "saw",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "short",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "a",
+                "weakForm": "/uh/",
+                "strongForm": "/ay/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "Yes I",
+                "cue": "Yes-I",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "saw a",
+                "cue": "saw-a",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "short article",
+                "cue": "short-article",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "short",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make Yes / saw / short stand out, keep small words light, and speak the phrase as one flow."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What did you find most interesting about the project?"
+        },
+        {
+          "speaker": "user",
+          "text": "I liked how neighbors work together to grow fresh vegetables and share them.",
+          "flowGuide": {
+            "text": "I liked how neighbors work together to grow fresh vegetables and share them.",
+            "focusWords": [
+              {
+                "word": "neighbors",
+                "reason": "key subject doing the action"
+              },
+              {
+                "word": "grow",
+                "reason": "main verb showing purpose"
+              },
+              {
+                "word": "share",
+                "reason": "second key verb showing community value"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "how",
+                "weakForm": "/huh/",
+                "strongForm": "/haʊ/",
+                "reason": "function word; unstressed in this clause"
+              },
+              {
+                "word": "to",
+                "weakForm": "/tə/",
+                "strongForm": "/tuː/",
+                "reason": "infinitive marker; light before vowel"
+              },
+              {
+                "word": "and",
+                "weakForm": "/ən/",
+                "strongForm": "/ænd/",
+                "reason": "joining word; reduced between vowels"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "work together",
+                "cue": "work-tuh-geth-er",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "grow fresh",
+                "cue": "grow-fresh",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "share them",
+                "cue": "share-’em",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "share",
+              "reason": "final meaningful verb; completes the idea with closure"
+            },
+            "teachingPrompt": "Say it smoothly: 'work-tuh-geth-er', 'grow-fresh', 'share-’em' — end firmly on 'share'."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly — teamwork and local food access are really important benefits."
+        },
+        {
+          "speaker": "user",
+          "text": "I think more cities should support gardens like this one.",
+          "flowGuide": {
+            "text": "I think more cities should support gardens like this one.",
+            "focusWords": [
+              {
+                "word": "think",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "more",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "cities",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "should",
+                "weakForm": "/shuhd/",
+                "strongForm": "/should/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "cities should",
+                "cue": "cities-should",
+                "type": "same-consonant"
+              },
+              {
+                "text": "this one",
+                "cue": "this-one",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "cities",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make think / more / cities stand out, keep small words light, and speak the phrase as one flow."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Would you ever volunteer at a community garden yourself?"
+        },
+        {
+          "speaker": "user",
+          "text": "I would love to try, but I’m not sure what tasks beginners usually do.",
+          "flowGuide": {
+            "text": "I would love to try, but I’m not sure what tasks beginners usually do.",
+            "focusWords": [
+              {
+                "word": "love",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "try",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "not",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "would",
+                "weakForm": "/wuhd/",
+                "strongForm": "/would/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "to",
+                "weakForm": "/tuh/",
+                "strongForm": "/too/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "but I",
+                "cue": "but-I",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "what tasks",
+                "cue": "what-tasks",
+                "type": "same-consonant"
+              },
+              {
+                "text": "beginners usually",
+                "cue": "beginners-usually",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "not",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make love / try / not stand out, keep small words light, and speak the phrase as one flow."
+          }
+        }
+      ]
+    },
+    {
+      "topic": "Community gardens helping cities fight food insecurity",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you hear about the new community garden project in downtown Chicago?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I read a short article about it last week on a news website."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What part of the story interested you the most?"
+        },
+        {
+          "speaker": "user",
+          "text": "I liked how local families grow vegetables together and share the harvest."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly — it’s not just about food, but also building trust and friendship."
+        },
+        {
+          "speaker": "user",
+          "text": "True, and volunteers teach kids how to plant and care for crops too."
+        },
+        {
+          "speaker": "coach",
+          "text": "Wonderful! Would you like to help start something similar in your neighborhood?"
+        },
+        {
+          "speaker": "user",
+          "text": "I think so — maybe I could talk to my neighbors and ask for ideas."
+        }
+      ]
     }
   ],
   "Entertainment & Culture": [
@@ -5100,44 +5343,6 @@
         {
           "speaker": "user",
           "text": "Thanks, Alex—I feel more motivated now to watch shows in English every day!"
-        }
-      ]
-    },
-    {
-      "topic": "Favorite childhood cartoon and its cultural impact",
-      "category": "Entertainment & Culture",
-      "turns": [
-        {
-          "speaker": "coach",
-          "text": "Hey! What’s one cartoon you loved watching as a kid in your country?"
-        },
-        {
-          "speaker": "user",
-          "text": "I really liked 'Dora the Explorer' because it taught me simple English words and fun songs."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s awesome—Dora was popular worldwide! Did you watch it in English or in your native language?"
-        },
-        {
-          "speaker": "user",
-          "text": "I watched it in Spanish first, but later I tried the English version with subtitles."
-        },
-        {
-          "speaker": "coach",
-          "text": "Great idea! Subtitles help your brain connect sounds, words, and meaning all at once."
-        },
-        {
-          "speaker": "user",
-          "text": "Yes, and sometimes I repeated phrases out loud to practice pronunciation and rhythm."
-        },
-        {
-          "speaker": "coach",
-          "text": "Perfect habit! Repeating aloud builds confidence and makes learning feel more natural."
-        },
-        {
-          "speaker": "user",
-          "text": "Now I even recommend Dora to my younger cousins who are starting English too."
         }
       ]
     },
@@ -5610,6 +5815,348 @@
         {
           "speaker": "user",
           "text": "Thank you! Talking about this makes me want to watch it again tonight."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite childhood cartoon and its cultural impact",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey! What’s one cartoon you loved watching as a kid in your country?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really liked 'Dora the Explorer' because it taught me simple English words and fun songs.",
+          "flowGuide": {
+            "text": "I really liked 'Dora the Explorer' because it taught me simple English words and fun songs.",
+            "focusWords": [
+              {
+                "word": "really",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "liked",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "Dora",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "the",
+                "weakForm": "/thuh/ or /thee/",
+                "strongForm": "/thee/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "and",
+                "weakForm": "/uhn/ or /n/",
+                "strongForm": "/and/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "liked Dora",
+                "cue": "liked-Dora",
+                "type": "same-consonant"
+              },
+              {
+                "text": "the Explorer",
+                "cue": "the-Explorer",
+                "type": "vowel-vowel"
+              },
+              {
+                "text": "because it",
+                "cue": "because-it",
+                "type": "vowel-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "Dora",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make really / liked / Dora stand out, keep small words light, and speak the phrase as one flow."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s awesome—Dora was popular worldwide! Did you watch it in English or in your native language?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watched it in Spanish first, but later I tried the English version with subtitles.",
+          "flowGuide": {
+            "text": "I watched it in Spanish first, but later I tried the English version with subtitles.",
+            "focusWords": [
+              {
+                "word": "Spanish",
+                "reason": "key language name, carries core meaning"
+              },
+              {
+                "word": "English",
+                "reason": "contrasting language, central to meaning"
+              },
+              {
+                "word": "subtitles",
+                "reason": "key detail about viewing method"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "I",
+                "weakForm": "/ə/",
+                "strongForm": "/aɪ/",
+                "reason": "subject pronoun unstressed here"
+              },
+              {
+                "word": "it",
+                "weakForm": "/ət/",
+                "strongForm": "/ɪt/",
+                "reason": "pronoun linking, low emphasis"
+              },
+              {
+                "word": "but",
+                "weakForm": "/bət/",
+                "strongForm": "/bʌt/",
+                "reason": "coordinating conjunction, lightly stressed"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "watched it",
+                "cue": "watch-tuh",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "in Spanish",
+                "cue": "in-Spanish",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "tried the",
+                "cue": "tried-thuh",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "subtitles",
+              "reason": "final key information; natural end of statement"
+            },
+            "teachingPrompt": "Say it smoothly—link 'watched it' and 'in Spanish', and drop your voice on 'subtitles'."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Great idea! Subtitles help your brain connect sounds, words, and meaning all at once."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, and sometimes I repeated phrases out loud to practice pronunciation and rhythm.",
+          "flowGuide": {
+            "text": "Yes, and sometimes I repeated phrases out loud to practice pronunciation and rhythm.",
+            "focusWords": [
+              {
+                "word": "Yes",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "sometimes",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "repeated",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "and",
+                "weakForm": "/uhn/ or /n/",
+                "strongForm": "/and/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "to",
+                "weakForm": "/tuh/",
+                "strongForm": "/too/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "and",
+                "weakForm": "/uhn/ or /n/",
+                "strongForm": "/and/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "Yes and",
+                "cue": "Yes-and",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "sometimes I",
+                "cue": "sometimes-I",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "phrases out",
+                "cue": "phrases-out",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "repeated",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make Yes / sometimes / repeated stand out, keep small words light, and speak the phrase as one flow."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Perfect habit! Repeating aloud builds confidence and makes learning feel more natural."
+        },
+        {
+          "speaker": "user",
+          "text": "Now I even recommend Dora to my younger cousins who are starting English too.",
+          "flowGuide": {
+            "text": "Now I even recommend Dora to my younger cousins who are starting English too.",
+            "focusWords": [
+              {
+                "word": "Now",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "even",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "recommend",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "to",
+                "weakForm": "/tuh/",
+                "strongForm": "/too/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "are",
+                "weakForm": "/er/",
+                "strongForm": "/ar/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "Now I",
+                "cue": "Now-I",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "I even",
+                "cue": "I-even",
+                "type": "vowel-vowel"
+              },
+              {
+                "text": "recommend Dora",
+                "cue": "recommend-Dora",
+                "type": "same-consonant"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "recommend",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make Now / even / recommend stand out, keep small words light, and speak the phrase as one flow."
+          }
+        }
+      ]
+    },
+    {
+      "topic": "Favorite movies and why they inspire us",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s one movie that really made you think or feel something strong?"
+        },
+        {
+          "speaker": "user",
+          "text": "I love 'Inside Out' because it helps me understand my own emotions better."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice! How did the characters help you relate to your feelings?"
+        },
+        {
+          "speaker": "user",
+          "text": "Joy and Sadness taught me that all emotions are important and useful."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Even sadness has a special role in helping us grow and connect."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I started talking more openly about my feelings after watching it."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s real progress — storytelling can truly change how we see ourselves."
+        },
+        {
+          "speaker": "user",
+          "text": "I want to watch more films like this and practice describing them in English."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite films and cultural impact",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s one movie that really inspired you, and why do you like it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I love 'Coco' because it shows Mexican traditions in a fun and emotional way."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice—how did watching it help you understand more about Mexican culture?"
+        },
+        {
+          "speaker": "user",
+          "text": "It taught me about Día de Muertos and family respect through colorful storytelling."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Films like that make learning culture feel personal and meaningful."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I even tried making pan de muerto with my host family last year."
+        },
+        {
+          "speaker": "coach",
+          "text": "Wow—that’s amazing! Sharing food is such a beautiful way to connect across cultures."
+        },
+        {
+          "speaker": "user",
+          "text": "It made me want to watch more Spanish-language films with English subtitles."
         }
       ]
     }
