@@ -17,6 +17,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     doneRef.current = false;
     const words = text.split(/\s+/).filter(Boolean).length;
     const estimatedMs = Math.max(3000, words * 450);
+    const serverTtsFetchTimeoutMs = 4_500;
     const serverWatchdogMs = Math.max(30000, estimatedMs + 15000);
     let forceAdvance: ReturnType<typeof setTimeout> | null = null;
 
@@ -31,6 +32,16 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     };
     finishRef.current = finish;
 
+    const keepCoachLineVisible = () => {
+      if (forceAdvance) clearTimeout(forceAdvance);
+      if (fallback) clearTimeout(fallback);
+      if (startFallback) clearTimeout(startFallback);
+      forceAdvance = null;
+      fallback = null;
+      startFallback = null;
+      utteranceRef.current = null;
+    };
+
     const synth = typeof window === "undefined" ? null : window.speechSynthesis;
     const serverTtsAbort = new AbortController();
     let cancelled = false;
@@ -42,7 +53,10 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     async function speak() {
       try {
         serverTimeout = setTimeout(() => serverTtsAbort.abort(), serverWatchdogMs);
-        await playServerSpeechAudio(text, "Samantha", { signal: serverTtsAbort.signal });
+        await playServerSpeechAudio(text, "Samantha", {
+          signal: serverTtsAbort.signal,
+          fetchTimeoutMs: serverTtsFetchTimeoutMs,
+        });
         if (serverTimeout) clearTimeout(serverTimeout);
         serverTimeout = null;
         if (cancelled) return;
@@ -57,7 +71,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
 
       if (cancelled) return;
       if (!synth) {
-        finish();
+        keepCoachLineVisible();
         return;
       }
 
@@ -88,7 +102,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       utterance.onerror = () => {
         if (!started) {
           synth.cancel();
-          finish();
+          keepCoachLineVisible();
         } else {
           finish();
         }
@@ -97,7 +111,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
       startFallback = setTimeout(() => {
         if (!started) {
           synth.cancel();
-          finish();
+          keepCoachLineVisible();
         }
       }, 1200);
       fallback = setTimeout(() => {

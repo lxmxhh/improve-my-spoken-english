@@ -115,6 +115,7 @@ function getFlowGuideKey(referenceText: string, previousCoachLine: string) {
 const CATEGORIES = [...SCRIPT_CATEGORIES];
 const SESSION_MAX_SEC = 300;
 const SUMMARY_TIMEOUT_MS = 12_000;
+const BACKGROUND_REFILL_DELAY_MS = 12_000;
 
 const FALLBACK_SESSION_SUMMARY = "Great job! Keep practicing every day!";
 
@@ -324,7 +325,9 @@ export default function SessionPage() {
       .catch((error) => {
         console.warn("[script-pool] file script load failed:", error);
       });
-    void refillScriptPool(category);
+    setTimeout(() => {
+      void refillScriptPool(category);
+    }, BACKGROUND_REFILL_DELAY_MS);
   }, []);
 
   const clearSessionUiState = useCallback(() => {
@@ -709,15 +712,25 @@ export default function SessionPage() {
   useEffect(() => {
     if (!state.script) return;
 
-    state.script.turns.forEach((turn, index) => {
-      if (turn.speaker !== "user") return;
-      prefetchFlowGuide(
-        getReferenceText(turn),
-        getPreviousCoachLine(state.script!.turns, index),
-        index
-      );
-    });
-  }, [prefetchFlowGuide, state.script]);
+    const upcomingUserTurns = state.script.turns
+      .map((turn, index) => ({ turn, index }))
+      .filter(({ turn, index }) => turn.speaker === "user" && index >= state.currentScriptIndex)
+      .slice(0, state.stage === "warmup" ? 1 : 2);
+
+    const timers = upcomingUserTurns.map(({ turn, index }, position) => (
+      setTimeout(() => {
+        prefetchFlowGuide(
+          getReferenceText(turn),
+          getPreviousCoachLine(state.script!.turns, index),
+          index
+        );
+      }, (state.stage === "warmup" ? 1200 : 800) + position * 1500)
+    ));
+
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [prefetchFlowGuide, state.currentScriptIndex, state.script, state.stage]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {

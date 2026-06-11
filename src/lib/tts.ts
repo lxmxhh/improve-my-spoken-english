@@ -62,6 +62,7 @@ export function waitForSpeechVoices(timeoutMs = 1500): Promise<SpeechSynthesisVo
 
 interface ServerSpeechOptions {
   signal?: AbortSignal;
+  fetchTimeoutMs?: number;
 }
 
 function createAbortError(): Error {
@@ -80,22 +81,39 @@ export async function playServerSpeechAudio(
 ): Promise<void> {
   if (options.signal?.aborted) throw createAbortError();
 
-  if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
-  const response = await fetch("/api/tts-say", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voice }),
-    signal: options.signal,
-  });
+  const fetchController = new AbortController();
+  const abortFetch = () => fetchController.abort();
+  let fetchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  if (options.signal?.aborted) throw createAbortError();
-  if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
-  if (!response.ok) {
-    const err = await response.text().catch(() => "");
-    throw new Error(`tts-say ${response.status}: ${err}`);
+  options.signal?.addEventListener("abort", abortFetch, { once: true });
+  if (options.fetchTimeoutMs) {
+    fetchTimeout = setTimeout(abortFetch, options.fetchTimeoutMs);
   }
 
-  const blob = await response.blob();
+  if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
+  let blob: Blob;
+  try {
+    const response = await fetch("/api/tts-say", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+      signal: fetchController.signal,
+    });
+
+    if (options.signal?.aborted) throw createAbortError();
+    if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
+    if (!response.ok) {
+      const err = await response.text().catch(() => "");
+      throw new Error(`tts-say ${response.status}: ${err}`);
+    }
+
+    blob = await response.blob();
+  } finally {
+    if (fetchTimeout) clearTimeout(fetchTimeout);
+    options.signal?.removeEventListener("abort", abortFetch);
+  }
+
+  if (options.signal?.aborted) throw createAbortError();
   if (DEBUG_TTS) console.log("[TTS] blob size:", blob.size, "type:", blob.type);
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
