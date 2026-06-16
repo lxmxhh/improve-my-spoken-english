@@ -79,39 +79,7 @@ export async function playServerSpeechAudio(
   voice = "Samantha",
   options: ServerSpeechOptions = {}
 ): Promise<void> {
-  if (options.signal?.aborted) throw createAbortError();
-
-  const fetchController = new AbortController();
-  const abortFetch = () => fetchController.abort();
-  let fetchTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  options.signal?.addEventListener("abort", abortFetch, { once: true });
-  if (options.fetchTimeoutMs) {
-    fetchTimeout = setTimeout(abortFetch, options.fetchTimeoutMs);
-  }
-
-  if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
-  let blob: Blob;
-  try {
-    const response = await fetch("/api/tts-say", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
-      signal: fetchController.signal,
-    });
-
-    if (options.signal?.aborted) throw createAbortError();
-    if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
-    if (!response.ok) {
-      const err = await response.text().catch(() => "");
-      throw new Error(`tts-say ${response.status}: ${err}`);
-    }
-
-    blob = await response.blob();
-  } finally {
-    if (fetchTimeout) clearTimeout(fetchTimeout);
-    options.signal?.removeEventListener("abort", abortFetch);
-  }
+  const blob = await fetchServerSpeechBlob(text, voice, options);
 
   if (options.signal?.aborted) throw createAbortError();
   if (DEBUG_TTS) console.log("[TTS] blob size:", blob.size, "type:", blob.type);
@@ -161,6 +129,93 @@ export async function playServerSpeechAudio(
   }).finally(() => {
     URL.revokeObjectURL(url);
   });
+}
+
+export async function prewarmServerSpeechAudio(
+  text: string,
+  voice = "Samantha",
+  options: ServerSpeechOptions = {}
+): Promise<void> {
+  await fetchServerSpeechBlob(text, voice, options);
+}
+
+export async function prewarmServerSpeechTexts(
+  texts: string[],
+  options: ServerSpeechOptions = {}
+): Promise<void> {
+  const cleanTexts = texts.map((text) => text.trim()).filter(Boolean);
+  if (cleanTexts.length === 0) return;
+
+  if (options.signal?.aborted) throw createAbortError();
+
+  const fetchController = new AbortController();
+  const abortFetch = () => fetchController.abort();
+  let fetchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  options.signal?.addEventListener("abort", abortFetch, { once: true });
+  if (options.fetchTimeoutMs) {
+    fetchTimeout = setTimeout(abortFetch, options.fetchTimeoutMs);
+  }
+
+  try {
+    const response = await fetch("/api/tts-prewarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts: cleanTexts }),
+      signal: fetchController.signal,
+    });
+
+    if (options.signal?.aborted) throw createAbortError();
+    if (!response.ok) {
+      const err = await response.text().catch(() => "");
+      throw new Error(`tts-prewarm ${response.status}: ${err}`);
+    }
+  } finally {
+    if (fetchTimeout) clearTimeout(fetchTimeout);
+    options.signal?.removeEventListener("abort", abortFetch);
+  }
+}
+
+async function fetchServerSpeechBlob(
+  text: string,
+  voice: string,
+  options: ServerSpeechOptions
+): Promise<Blob> {
+  if (options.signal?.aborted) throw createAbortError();
+
+  const fetchController = new AbortController();
+  const abortFetch = () => fetchController.abort();
+  let fetchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  options.signal?.addEventListener("abort", abortFetch, { once: true });
+  if (options.fetchTimeoutMs) {
+    fetchTimeout = setTimeout(abortFetch, options.fetchTimeoutMs);
+  }
+
+  if (DEBUG_TTS) console.log("[TTS] fetching /api/tts-say for:", text.slice(0, 40));
+  let blob: Blob;
+  try {
+    const response = await fetch("/api/tts-say", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+      signal: fetchController.signal,
+    });
+
+    if (options.signal?.aborted) throw createAbortError();
+    if (DEBUG_TTS) console.log("[TTS] /api/tts-say status:", response.status);
+    if (!response.ok) {
+      const err = await response.text().catch(() => "");
+      throw new Error(`tts-say ${response.status}: ${err}`);
+    }
+
+    blob = await response.blob();
+  } finally {
+    if (fetchTimeout) clearTimeout(fetchTimeout);
+    options.signal?.removeEventListener("abort", abortFetch);
+  }
+
+  return blob;
 }
 
 export const playMacSpeechAudio = playServerSpeechAudio;

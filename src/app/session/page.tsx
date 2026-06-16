@@ -21,7 +21,7 @@ import type {
   TurnResult,
   UserRecording,
 } from "@/lib/types";
-import { pickEnglishVoice, playServerSpeechAudio, waitForSpeechVoices } from "@/lib/tts";
+import { pickEnglishVoice, playServerSpeechAudio, prewarmServerSpeechTexts, waitForSpeechVoices } from "@/lib/tts";
 
 const DEBUG_TTS = process.env.NEXT_PUBLIC_DEBUG_TTS === "1";
 
@@ -35,6 +35,7 @@ interface TipPracticeResult {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Stage = "loading" | "warmup" | "conversation" | "summarizing" | "summary";
+type CoachVoiceWarmupStatus = "idle" | "loading" | "ready" | "failed";
 
 interface State {
   stage: Stage;
@@ -106,6 +107,23 @@ function getPreviousCoachLine(turns: ScriptTurn[], currentScriptIndex: number) {
     .slice(0, currentScriptIndex)
     .reverse()
     .find((turn) => turn.speaker === "coach")?.text ?? "";
+}
+
+function getCoachLines(script: Script | null) {
+  return script?.turns
+    .filter((turn) => turn.speaker === "coach")
+    .map((turn) => turn.text.trim())
+    .filter(Boolean) ?? [];
+}
+
+function getFirstCoachLine(script: Script | null) {
+  return getCoachLines(script)[0] ?? "";
+}
+
+function getNextCoachLine(turns: ScriptTurn[], currentScriptIndex: number) {
+  return turns
+    .slice(currentScriptIndex + 1)
+    .find((turn) => turn.speaker === "coach")?.text.trim() ?? "";
 }
 
 function getFlowGuideKey(referenceText: string, previousCoachLine: string) {
@@ -305,6 +323,7 @@ export default function SessionPage() {
   const [tipPracticeResults, setTipPracticeResults] = useState<Record<string, TipPracticeResult>>({});
   const [playingTtsSource, setPlayingTtsSource] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>("practice");
+  const [coachVoiceWarmup, setCoachVoiceWarmup] = useState<CoachVoiceWarmupStatus>("idle");
   const [userRecordings, setUserRecordings] = useState<Record<number, UserRecording>>({});
   const [flowGuides, setFlowGuides] = useState<Record<string, ConnectedSpeechGuide | null>>({});
   const [flowGuideLoadingKeys, setFlowGuideLoadingKeys] = useState<Record<string, boolean>>({});
@@ -314,6 +333,7 @@ export default function SessionPage() {
   const scriptWithFlowGuidesRef = useRef<Script | null>(initial.script);
   const flowGuideSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flowGuideSaveInFlightRef = useRef(false);
+  const coachVoiceWarmupKeysRef = useRef<Set<string>>(new Set());
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
@@ -579,6 +599,85 @@ export default function SessionPage() {
     }, 0);
     return () => clearTimeout(timeout);
   }, [state.script]);
+
+  useEffect(() => {
+    let statusTimeout: ReturnType<typeof setTimeout> | null = null;
+    const setWarmupStatusSoon = (status: CoachVoiceWarmupStatus) => {
+      if (statusTimeout) clearTimeout(statusTimeout);
+      statusTimeout = setTimeout(() => {
+        setCoachVoiceWarmup(status);
+      }, 0);
+    };
+
+    const firstCoachLine = getFirstCoachLine(state.script);
+    if (!firstCoachLine) {
+      setWarmupStatusSoon("failed");
+      return () => {
+        if (statusTimeout) clearTimeout(statusTimeout);
+      };
+    }
+
+    const warmupKey = `${getScriptKey(state.script!)}:${firstCoachLine}`;
+    if (coachVoiceWarmupKeysRef.current.has(warmupKey)) {
+      setWarmupStatusSoon("ready");
+      return () => {
+        if (statusTimeout) clearTimeout(statusTimeout);
+      };
+    }
+
+    const controller = new AbortController();
+    setWarmupStatusSoon("loading");
+
+    void prewarmServerSpeechTexts([firstCoachLine], {
+      signal: controller.signal,
+      fetchTimeoutMs: 30_000,
+    })
+      .then(() => {
+        coachVoiceWarmupKeysRef.current.add(warmupKey);
+        if (!controller.signal.aborted) setWarmupStatusSoon("ready");
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.warn("[TTS] coach voice warmup failed:", error);
+          setWarmupStatusSoon("failed");
+        }
+      });
+
+    return () => {
+      controller.abort();
+      if (statusTimeout) clearTimeout(statusTimeout);
+    };
+  }, [state.script]);
+
+  useEffect(() => {
+    if (!state.script || state.stage !== "conversation") return;
+
+    const currentTurn = state.script.turns[state.currentScriptIndex];
+    if (!currentTurn || currentTurn.speaker !== "user") return;
+
+    const texts = [
+      getReferenceText(currentTurn),
+      getNextCoachLine(state.script.turns, state.currentScriptIndex),
+    ].map((text) => text.trim()).filter(Boolean);
+    if (texts.length === 0) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void prewarmServerSpeechTexts(texts, {
+        signal: controller.signal,
+        fetchTimeoutMs: 60_000,
+      }).catch((error) => {
+        if (!controller.signal.aborted) {
+          console.warn("[TTS] answer-window prewarm failed:", error);
+        }
+      });
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [state.currentScriptIndex, state.script, state.stage]);
 
   // Timer during conversation
   useEffect(() => {
@@ -927,9 +1026,10 @@ export default function SessionPage() {
 
           <button
             onClick={() => dispatch({ type: "START_CONVERSATION" })}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-10 rounded-xl transition-colors text-lg"
+            disabled={coachVoiceWarmup === "loading"}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-wait text-white font-semibold py-3 px-10 rounded-xl transition-colors text-lg"
           >
-            I&apos;m Ready
+            {coachVoiceWarmup === "loading" ? "Preparing Voice..." : "I'm Ready"}
           </button>
         </div>
       </div>

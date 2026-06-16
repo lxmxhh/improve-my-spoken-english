@@ -17,7 +17,7 @@ export default function CoachLine({ text, onDone }: CoachLineProps) {
     doneRef.current = false;
     const words = text.split(/\s+/).filter(Boolean).length;
     const estimatedMs = Math.max(3000, words * 450);
-    const serverTtsFetchTimeoutMs = 4_500;
+    const serverTtsFetchTimeoutMs = 20_000;
     const serverWatchdogMs = Math.max(30000, estimatedMs + 15000);
     let forceAdvance: ReturnType<typeof setTimeout> | null = null;
 

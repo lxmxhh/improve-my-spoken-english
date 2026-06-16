@@ -1547,7 +1547,63 @@
         },
         {
           "speaker": "user",
-          "text": "I would like it hot, but not too sweet."
+          "text": "I would like it hot, but not too sweet.",
+          "flowGuide": {
+            "text": "I would like it hot, but not too sweet.",
+            "focusWords": [
+              {
+                "word": "hot",
+                "reason": "key preference; contrasts with 'iced'"
+              },
+              {
+                "word": "sweet",
+                "reason": "key flavor modifier; carries meaning"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "would",
+                "weakForm": "/wəd/",
+                "strongForm": "/wʊd/",
+                "reason": "modal verb; unstressed in polite request"
+              },
+              {
+                "word": "but",
+                "weakForm": "/bət/",
+                "strongForm": "/bʌt/",
+                "reason": "coordinating conjunction; light connective"
+              },
+              {
+                "word": "to",
+                "weakForm": "/tə/",
+                "strongForm": "/tuː/",
+                "reason": "part of 'too'; reduced before consonant"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "like it",
+                "cue": "like-it",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "hot but",
+                "cue": "hot-buh",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "not too",
+                "cue": "noh-too",
+                "type": "vowel-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "sweet",
+              "reason": "final content word; signals completion of request"
+            },
+            "teachingPrompt": "Say 'hot' and 'sweet' clearly and slightly louder—let your voice drop gently on 'sweet'."
+          }
         },
         {
           "speaker": "coach",
@@ -1568,6 +1624,180 @@
       ]
     },
     {
+      "topic": "Asking for Directions",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Let's practice directions. Where are you trying to go?"
+        },
+        {
+          "speaker": "user",
+          "text": "I am trying to find the nearest subway station.",
+          "flowGuide": {
+            "text": "I am trying to find the nearest subway station.",
+            "focusWords": [
+              {
+                "word": "find",
+                "reason": "main verb showing intent"
+              },
+              {
+                "word": "nearest",
+                "reason": "key adjective for location accuracy"
+              },
+              {
+                "word": "subway",
+                "reason": "essential noun for destination type"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "am",
+                "weakForm": "/əm/",
+                "strongForm": "/æm/",
+                "reason": "function word; unstressed in continuous tense"
+              },
+              {
+                "word": "to",
+                "weakForm": "/tə/",
+                "strongForm": "/tuː/",
+                "reason": "infinitive marker; usually reduced"
+              },
+              {
+                "word": "the",
+                "weakForm": "/ðə/",
+                "strongForm": "/ðiː/",
+                "reason": "definite article before consonant sound"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "trying to",
+                "cue": "tryin-tuh",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "find the",
+                "cue": "find-thuh",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "subway station",
+                "cue": "subwayshun",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "station",
+              "reason": "final content word; signals completion of request"
+            },
+            "teachingPrompt": "Say it smoothly—link 'trying to' and 'find the', and drop your voice on 'station'."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "You are close. Walk straight for two blocks first."
+        },
+        {
+          "speaker": "user",
+          "text": "Should I turn left at the traffic light?"
+        },
+        {
+          "speaker": "coach",
+          "text": "Yes, then you will see the entrance beside a bank."
+        },
+        {
+          "speaker": "user",
+          "text": "Thank you. Is it about five minutes from here?"
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly. It is a short and easy walk."
+        },
+        {
+          "speaker": "user",
+          "text": "Great, I think I can find it now."
+        }
+      ]
+    },
+    {
+      "topic": "Planning a Healthy Morning Routine",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey there! How do you usually start your day, and what’s one thing you’d like to improve?"
+        },
+        {
+          "speaker": "user",
+          "text": "I wake up at seven, drink coffee, and check my phone—but I want to feel more energized."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great goal! What small change could you try just three mornings this week?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe I’ll skip the phone for ten minutes and stretch instead of scrolling."
+        },
+        {
+          "speaker": "coach",
+          "text": "Perfect! Stretching helps your body wake up gently—how will you remember to do it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I’ll put my phone in another room and lay out my yoga mat the night before."
+        },
+        {
+          "speaker": "coach",
+          "text": "Brilliant planning! Tell me how it feels after your first successful morning."
+        },
+        {
+          "speaker": "user",
+          "text": "I felt calmer and focused, and I even had time to eat breakfast slowly."
+        }
+      ]
+    },
+    {
+      "topic": "Planning a relaxing weekend",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey there! How do you usually spend your weekends? I'd love to hear about it."
+        },
+        {
+          "speaker": "user",
+          "text": "I often sleep late, watch movies, and sometimes meet friends for coffee in the afternoon."
+        },
+        {
+          "speaker": "coach",
+          "text": "That sounds lovely! What’s one small thing you’d like to try this weekend?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe I’ll cook a new recipe—I found an easy pasta dish online yesterday."
+        },
+        {
+          "speaker": "coach",
+          "text": "Awesome! Cooking is fun—do you follow recipes in English or translate them first?"
+        },
+        {
+          "speaker": "user",
+          "text": "I read them in English but use my phone to check words I don’t understand."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s smart—you’re building vocabulary while doing something real and useful!"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, and I feel more confident ordering food or chatting in restaurants now."
+        }
+      ]
+    },
+    {
       "topic": "Planning a relaxing Sunday",
       "category": "Daily Life",
       "turns": [
@@ -1577,7 +1807,67 @@
         },
         {
           "speaker": "user",
-          "text": "I often sleep late, have coffee, and watch movies with my family at home."
+          "text": "I often sleep late, have coffee, and watch movies with my family at home.",
+          "flowGuide": {
+            "text": "I often sleep late, have coffee, and watch movies with my family at home.",
+            "focusWords": [
+              {
+                "word": "sleep",
+                "reason": "key action verb showing routine habit"
+              },
+              {
+                "word": "coffee",
+                "reason": "content noun; central to the Sunday ritual"
+              },
+              {
+                "word": "movies",
+                "reason": "key noun; highlights shared family activity"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "I",
+                "weakForm": "/ə/",
+                "strongForm": "/aɪ/",
+                "reason": "pronoun unstressed in subject position"
+              },
+              {
+                "word": "and",
+                "weakForm": "/ən/",
+                "strongForm": "/ænd/",
+                "reason": "conjunction linking list items lightly"
+              },
+              {
+                "word": "with",
+                "weakForm": "/wɪð/",
+                "strongForm": "/wɪθ/",
+                "reason": "function word; /ð/ often voiced and reduced before consonant"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "sleep late",
+                "cue": "sleep-late",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "have coffee",
+                "cue": "have-coffee",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "movies with",
+                "cue": "movies-with",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "home",
+              "reason": "final word of statement; signals completion naturally"
+            },
+            "teachingPrompt": "Say it smoothly—link 'sleep late' and end firmly on 'home'."
+          }
         },
         {
           "speaker": "coach",
@@ -5635,44 +5925,6 @@
       ]
     },
     {
-      "topic": "How cities are reducing plastic waste",
-      "category": "News & Society",
-      "turns": [
-        {
-          "speaker": "coach",
-          "text": "Did you read about the new plastic ban in Lisbon last month?"
-        },
-        {
-          "speaker": "user",
-          "text": "Yes, I saw it online but I don’t fully understand how it works."
-        },
-        {
-          "speaker": "coach",
-          "text": "It means shops can’t give free plastic bags or single-use packaging anymore."
-        },
-        {
-          "speaker": "user",
-          "text": "That sounds good — but what do people use instead of plastic bags?"
-        },
-        {
-          "speaker": "coach",
-          "text": "Most carry reusable cloth bags, and some stores sell eco-friendly paper alternatives."
-        },
-        {
-          "speaker": "user",
-          "text": "I think my city should try that too — it’s better for the ocean."
-        },
-        {
-          "speaker": "coach",
-          "text": "Absolutely! Small changes like this really help protect marine life and reduce pollution."
-        },
-        {
-          "speaker": "user",
-          "text": "Next time I shop, I’ll bring my own bag to start making a difference."
-        }
-      ]
-    },
-    {
       "topic": "Community gardens helping city neighborhoods",
       "category": "News & Society",
       "turns": [
@@ -5761,6 +6013,180 @@
         {
           "speaker": "user",
           "text": "Maybe I’ll volunteer there this summer and practice English with other gardeners too."
+        }
+      ]
+    },
+    {
+      "topic": "How cities are reducing plastic waste",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Did you read about the new plastic ban in Lisbon last month?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I saw it online but I don’t fully understand how it works.",
+          "flowGuide": {
+            "text": "Yes, I saw it online but I don’t fully understand how it works.",
+            "focusWords": [
+              {
+                "word": "saw",
+                "reason": "key past action verb"
+              },
+              {
+                "word": "understand",
+                "reason": "core meaning verb"
+              },
+              {
+                "word": "works",
+                "reason": "main verb of the clause"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "I",
+                "weakForm": "/ə/",
+                "strongForm": "/aɪ/",
+                "reason": "pronoun unstressed in subject position"
+              },
+              {
+                "word": "but",
+                "weakForm": "/bət/",
+                "strongForm": "/bʌt/",
+                "reason": "conjunction linking clauses lightly"
+              },
+              {
+                "word": "don’t",
+                "weakForm": "/dənt/",
+                "strongForm": "/doʊnt/",
+                "reason": "contraction commonly reduced in fast speech"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "saw it",
+                "cue": "sawit",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "don’t fully",
+                "cue": "dontfully",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "how it",
+                "cue": "howit",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "works",
+              "reason": "final content word signals completion of thought"
+            },
+            "teachingPrompt": "Say it smoothly—link 'saw it', 'don’t fully', and 'how it'; let your voice fall on 'works'."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "It means shops can’t give free plastic bags or single-use packaging anymore."
+        },
+        {
+          "speaker": "user",
+          "text": "That sounds good — but what do people use instead of plastic bags?"
+        },
+        {
+          "speaker": "coach",
+          "text": "Most carry reusable cloth bags, and some stores sell eco-friendly paper alternatives."
+        },
+        {
+          "speaker": "user",
+          "text": "I think my city should try that too — it’s better for the ocean."
+        },
+        {
+          "speaker": "coach",
+          "text": "Absolutely! Small changes like this really help protect marine life and reduce pollution."
+        },
+        {
+          "speaker": "user",
+          "text": "Next time I shop, I’ll bring my own bag to start making a difference."
+        }
+      ]
+    },
+    {
+      "topic": "Community Gardens in Urban Areas",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Have you heard about the new community garden project opening downtown next month?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I saw a short article about it in the local newspaper last week."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! What part of the story interested you the most?"
+        },
+        {
+          "speaker": "user",
+          "text": "I liked how they explained how neighbors grow food together and share the harvest."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly — it’s not just about vegetables, but also building trust and friendship."
+        },
+        {
+          "speaker": "user",
+          "text": "True, and I think more cities should support projects like this one."
+        },
+        {
+          "speaker": "coach",
+          "text": "Would you volunteer at a community garden if there was one near your home?"
+        },
+        {
+          "speaker": "user",
+          "text": "I would definitely try it, even though I know very little about gardening right now."
+        }
+      ]
+    },
+    {
+      "topic": "Community Gardens in Urban Areas",
+      "category": "News & Society",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Did you read about the new community garden opening downtown last week?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I saw a short article online but I didn’t understand all the vocabulary."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s totally okay—let’s talk about it together using simple words and real examples."
+        },
+        {
+          "speaker": "user",
+          "text": "Great! I know gardens grow food, but why do cities build them now?"
+        },
+        {
+          "speaker": "coach",
+          "text": "Many cities build them to fight food shortages and bring neighbors together for shared work."
+        },
+        {
+          "speaker": "user",
+          "text": "Oh, so it helps people eat better and make friends too, right?"
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! Plus, kids learn about nature, and volunteers often get free vegetables every week."
+        },
+        {
+          "speaker": "user",
+          "text": "That sounds fun—I’d like to visit one and maybe help plant some tomatoes."
         }
       ]
     }
@@ -7432,6 +7858,310 @@
             "focusWords": [
               {
                 "word": "love",
+                "reason": "core emotion verb, carries speaker's strong feeling"
+              },
+              {
+                "word": "understand",
+                "reason": "key cognitive verb showing personal growth"
+              },
+              {
+                "word": "emotions",
+                "reason": "central noun—topic of reflection and insight"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "I",
+                "weakForm": "/ə/",
+                "strongForm": "/aɪ/",
+                "reason": "subject pronoun unstressed at sentence start"
+              },
+              {
+                "word": "it",
+                "weakForm": "/ət/",
+                "strongForm": "/ɪt/",
+                "reason": "pronoun linking clause, lightly stressed"
+              },
+              {
+                "word": "my",
+                "weakForm": "/mə/",
+                "strongForm": "/maɪ/",
+                "reason": "possessive adjective before noun, reduced in flow"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "love 'Inside",
+                "cue": "love-'In-side",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "Out because",
+                "cue": "Out-b'cause",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "me understand",
+                "cue": "mee-und'r-stand",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "emotions",
+              "reason": "final content word carrying the main reflective meaning"
+            },
+            "teachingPrompt": "Say it smoothly—let your voice drop gently on 'emotions' to show it’s the heart of your thought."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great choice—how did the characters help you see feelings in a new way?"
+        },
+        {
+          "speaker": "user",
+          "text": "Joy and Sadness taught me that all emotions are important, not just happiness."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly! It’s powerful how animation can explore deep ideas so clearly."
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, and I tried to describe the story to my friend in English last week."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s fantastic—you’re using real language for real connection and meaning!"
+        },
+        {
+          "speaker": "user",
+          "text": "Thank you! I feel more confident talking about films now in English."
+        }
+      ]
+    },
+    {
+      "topic": "favorite movie genres",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s your favorite movie genre, and why does it interest you so much?"
+        },
+        {
+          "speaker": "user",
+          "text": "I really like comedies because they help me relax and improve my English listening skills."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! Do you usually watch comedies with or without English subtitles?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watch them with English subtitles at first, then try without them later."
+        },
+        {
+          "speaker": "coach",
+          "text": "Awesome progress! Can you name one funny scene from a comedy that made you laugh hard?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, in 'Home Alone', when Kevin tricks the burglars with all those clever traps."
+        },
+        {
+          "speaker": "coach",
+          "text": "That scene is classic! What new English words or phrases did you learn from it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I learned 'booby trap', 'sneak up on', and 'outsmart' — they’re really useful!"
+        }
+      ]
+    },
+    {
+      "topic": "Favorite films and cultural impact",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s one movie that really inspired you, and why do you like it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I love 'Coco' because it shows Mexican traditions in a fun and emotional way."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s wonderful—how did watching 'Coco' change your view of other cultures?"
+        },
+        {
+          "speaker": "user",
+          "text": "It helped me understand Day of the Dead better and respect family traditions more."
+        },
+        {
+          "speaker": "coach",
+          "text": "Great point! Do you usually watch films with subtitles or without them?"
+        },
+        {
+          "speaker": "user",
+          "text": "I use English subtitles now because they help me learn new words slowly."
+        },
+        {
+          "speaker": "coach",
+          "text": "Smart choice—what’s one English phrase from a film you’ll never forget?"
+        },
+        {
+          "speaker": "user",
+          "text": "‘Remember me’ from 'Coco'—it’s simple but makes me feel happy and sad."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite movie genres and why they matter",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s your favorite movie genre, and what makes it special to you?"
+        },
+        {
+          "speaker": "user",
+          "text": "I love comedy films because they help me relax and laugh after a long day.",
+          "flowGuide": {
+            "text": "I love comedy films because they help me relax and laugh after a long day.",
+            "focusWords": [
+              {
+                "word": "love",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "comedy",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "films",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "and",
+                "weakForm": "/uhn/ or /n/",
+                "strongForm": "/and/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "a",
+                "weakForm": "/uh/",
+                "strongForm": "/ay/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "relax and",
+                "cue": "relax-and",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "laugh after",
+                "cue": "laugh-after",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "after a",
+                "cue": "after-a",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "films",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make love / comedy / films stand out, keep small words light, and speak the phrase as one flow."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s great! Do you usually watch comedies alone or with friends and family?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually watch them with my sister because we both enjoy silly jokes and happy endings."
+        },
+        {
+          "speaker": "coach",
+          "text": "Nice! Have you ever tried watching a comedy in English without subtitles?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, sometimes—but I miss some jokes because the speed feels too fast for me."
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s completely normal! Try pausing and repeating funny lines—it really helps your listening."
+        },
+        {
+          "speaker": "user",
+          "text": "I’ll do that next time—I want to understand more jokes and sound more natural speaking."
+        }
+      ]
+    },
+    {
+      "topic": "Netflix shows and cultural differences",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Have you watched any Netflix shows that surprised you with cultural differences?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I watched 'Money Heist' and loved how Spanish traditions appeared in the story."
+        },
+        {
+          "speaker": "coach",
+          "text": "That's great! What part of the show felt most different from your own culture?"
+        },
+        {
+          "speaker": "user",
+          "text": "The family meals were long and loud, but in my country we eat quickly and quietly."
+        },
+        {
+          "speaker": "coach",
+          "text": "Interesting! Did those scenes help you understand Spanish values better?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I realized family time is really important and not just about food."
+        },
+        {
+          "speaker": "coach",
+          "text": "Exactly — TV shows can teach us so much about daily life and beliefs."
+        },
+        {
+          "speaker": "user",
+          "text": "Now I watch shows with subtitles to learn real phrases people actually use."
+        }
+      ]
+    },
+    {
+      "topic": "Favorite movies and why they inspire us",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "What’s one movie that really made you think or feel something strong?"
+        },
+        {
+          "speaker": "user",
+          "text": "I love 'Inside Out' because it helps me understand my own emotions better.",
+          "flowGuide": {
+            "text": "I love 'Inside Out' because it helps me understand my own emotions better.",
+            "focusWords": [
+              {
+                "word": "love",
                 "reason": "This word carries the main information."
               },
               {
@@ -7475,7 +8205,67 @@
         },
         {
           "speaker": "user",
-          "text": "Joy and Sadness taught me that all emotions are important and useful."
+          "text": "Joy and Sadness taught me that all emotions are important and useful.",
+          "flowGuide": {
+            "text": "Joy and Sadness taught me that all emotions are important and useful.",
+            "focusWords": [
+              {
+                "word": "Joy",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "Sadness",
+                "reason": "This word carries the main information."
+              },
+              {
+                "word": "taught",
+                "reason": "This word carries the main information."
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "and",
+                "weakForm": "/uhn/ or /n/",
+                "strongForm": "/and/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "that",
+                "weakForm": "/thuht/",
+                "strongForm": "/that/",
+                "reason": "Keep this function word light so the focus words stand out."
+              },
+              {
+                "word": "are",
+                "weakForm": "/er/",
+                "strongForm": "/ar/",
+                "reason": "Keep this function word light so the focus words stand out."
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "Joy and",
+                "cue": "Joy-and",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "that all",
+                "cue": "that-all",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "all emotions",
+                "cue": "all-emotions",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "taught",
+              "reason": "Use a falling ending to sound clear and complete."
+            },
+            "teachingPrompt": "Make Joy / Sadness / taught stand out, keep small words light, and speak the phrase as one flow."
+          }
         },
         {
           "speaker": "coach",
@@ -7483,7 +8273,67 @@
         },
         {
           "speaker": "user",
-          "text": "Yes, I started talking more openly about my feelings after watching it."
+          "text": "Yes, I started talking more openly about my feelings after watching it.",
+          "flowGuide": {
+            "text": "Yes, I started talking more openly about my feelings after watching it.",
+            "focusWords": [
+              {
+                "word": "started",
+                "reason": "main verb showing beginning of new behavior"
+              },
+              {
+                "word": "openly",
+                "reason": "key adverb describing how the talking changed"
+              },
+              {
+                "word": "feelings",
+                "reason": "core noun — emotional content central to meaning"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "I",
+                "weakForm": "/ə/",
+                "strongForm": "/aɪ/",
+                "reason": "subject pronoun unstressed in this position"
+              },
+              {
+                "word": "about",
+                "weakForm": "/əˈbaʊt/",
+                "strongForm": "/əˈbaʊt/ or /æˈbaʊt/",
+                "reason": "preposition reduced in connected speech"
+              },
+              {
+                "word": "my",
+                "weakForm": "/mə/",
+                "strongForm": "/maɪ/",
+                "reason": "possessive adjective light before consonant"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "started talking",
+                "cue": "start-talking",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "more openly",
+                "cue": "more-openly",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "after watching",
+                "cue": "after-watching",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "feelings",
+              "reason": "final content word carrying emotional weight and sentence closure"
+            },
+            "teachingPrompt": "Say it smoothly—link 'started talking' and let your voice gently fall on 'feelings'."
+          }
         },
         {
           "speaker": "coach",
@@ -7491,83 +8341,67 @@
         },
         {
           "speaker": "user",
-          "text": "I want to watch more films like this and practice describing them in English."
-        }
-      ]
-    },
-    {
-      "topic": "Favorite movie genres and why they matter",
-      "category": "Entertainment & Culture",
-      "turns": [
-        {
-          "speaker": "coach",
-          "text": "What’s your favorite movie genre, and what makes it special to you?"
-        },
-        {
-          "speaker": "user",
-          "text": "I love comedy films because they help me relax and laugh after a long day."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s great! Do you usually watch comedies alone or with friends and family?"
-        },
-        {
-          "speaker": "user",
-          "text": "I usually watch them with my sister because we both enjoy silly jokes and happy endings."
-        },
-        {
-          "speaker": "coach",
-          "text": "Nice! Have you ever tried watching a comedy in English without subtitles?"
-        },
-        {
-          "speaker": "user",
-          "text": "Yes, sometimes—but I miss some jokes because the speed feels too fast for me."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s completely normal! Try pausing and repeating funny lines—it really helps your listening."
-        },
-        {
-          "speaker": "user",
-          "text": "I’ll do that next time—I want to understand more jokes and sound more natural speaking."
-        }
-      ]
-    },
-    {
-      "topic": "Favorite movies and why they inspire us",
-      "category": "Entertainment & Culture",
-      "turns": [
-        {
-          "speaker": "coach",
-          "text": "What’s one movie that really made you think or feel something strong?"
-        },
-        {
-          "speaker": "user",
-          "text": "I love 'Inside Out' because it helps me understand my own emotions better."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s a great choice—how did the characters help you see feelings in a new way?"
-        },
-        {
-          "speaker": "user",
-          "text": "Joy and Sadness taught me that all emotions are important, not just happiness."
-        },
-        {
-          "speaker": "coach",
-          "text": "Exactly! It’s powerful how animation can explore deep ideas so clearly."
-        },
-        {
-          "speaker": "user",
-          "text": "Yes, and I tried to describe the story to my friend in English last week."
-        },
-        {
-          "speaker": "coach",
-          "text": "That’s fantastic—you’re using real language for real connection and meaning!"
-        },
-        {
-          "speaker": "user",
-          "text": "Thank you! I feel more confident talking about films now in English."
+          "text": "I want to watch more films like this and practice describing them in English.",
+          "flowGuide": {
+            "text": "I want to watch more films like this and practice describing them in English.",
+            "focusWords": [
+              {
+                "word": "watch",
+                "reason": "key action verb, central to the goal"
+              },
+              {
+                "word": "films",
+                "reason": "main noun object, carries topic meaning"
+              },
+              {
+                "word": "practice",
+                "reason": "core learning verb, emphasizes active effort"
+              }
+            ],
+            "weakForms": [
+              {
+                "word": "to",
+                "weakForm": "/tuh/",
+                "strongForm": "/too/",
+                "reason": "preposition before verb, unstressed here"
+              },
+              {
+                "word": "and",
+                "weakForm": "/ənd/",
+                "strongForm": "/ænd/",
+                "reason": "coordinating conjunction, light linking role"
+              },
+              {
+                "word": "them",
+                "weakForm": "/əm/",
+                "strongForm": "/ðəm/",
+                "reason": "pronoun object, reduced after consonant"
+              }
+            ],
+            "linkedPhrases": [
+              {
+                "text": "want to",
+                "cue": "wanna",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "films like",
+                "cue": "filmz-like",
+                "type": "consonant-vowel"
+              },
+              {
+                "text": "describing them",
+                "cue": "describin’em",
+                "type": "consonant-vowel"
+              }
+            ],
+            "intonation": {
+              "contour": "falling",
+              "tonalWord": "English",
+              "reason": "final word signals completion of intention"
+            },
+            "teachingPrompt": "Say it smoothly—link 'want to' as 'wanna', and drop your voice on 'English'."
+          }
         }
       ]
     }
