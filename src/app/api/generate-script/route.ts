@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
+import { ensureAnchors } from "@/lib/anchor";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
-import type { Script, ScriptTurn } from "@/lib/types";
+import type { CoachPromptAnchor, Script, ScriptTurn } from "@/lib/types";
 
 const GENERATE_TIMEOUT_MS =
   Number(process.env.GENERATE_SCRIPT_TIMEOUT_MS) || 25_000;
@@ -13,7 +14,7 @@ const CATEGORIES = [
   "Entertainment & Culture",
 ];
 
-function normalizeScript(raw: unknown, fallbackCategory: string): Script {
+export function normalizeScript(raw: unknown, fallbackCategory: string): Script {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid script shape");
   }
@@ -65,11 +66,32 @@ function normalizeScript(raw: unknown, fallbackCategory: string): Script {
   };
 }
 
+function parseAnchor(candidate: { text: string; intent?: unknown; keyPoints?: unknown; sampleAnswer?: unknown }): CoachPromptAnchor | undefined {
+  const intent = typeof candidate.intent === "string" ? candidate.intent.trim() : "";
+  const keyPoints = Array.isArray(candidate.keyPoints)
+    ? candidate.keyPoints.filter((k): k is string => typeof k === "string" && k.trim().length > 0).map((k) => k.trim())
+    : [];
+  const sampleAnswer = typeof candidate.sampleAnswer === "string" && candidate.sampleAnswer.trim()
+    ? candidate.sampleAnswer.trim()
+    : candidate.text;
+
+  if (!intent && keyPoints.length === 0) return undefined;
+
+  return {
+    intent: intent || "answer the coach's question in your own words",
+    keyPoints: keyPoints.length > 0 ? keyPoints : ["respond in a full sentence"],
+    sampleAnswer,
+  };
+}
+
 function normalizeTurn(turn: unknown): ScriptTurn {
   const candidate = turn as {
     speaker?: unknown;
     text?: unknown;
     hint?: unknown;
+    intent?: unknown;
+    keyPoints?: unknown;
+    sampleAnswer?: unknown;
   };
   const speaker =
     candidate.speaker === "coach" || candidate.speaker === "c" || candidate.speaker === "Alex"
@@ -85,12 +107,16 @@ function normalizeTurn(turn: unknown): ScriptTurn {
     throw new Error("Invalid turn shape");
   }
 
+  const text = candidate.text.trim();
+  const anchor = speaker === "user" ? parseAnchor({ ...candidate, text }) : undefined;
+
   return {
     speaker,
-    text: candidate.text.trim(),
+    text,
     ...(typeof candidate.hint === "string" && candidate.hint.trim()
       ? { hint: candidate.hint.trim() }
       : {}),
+    ...(anchor ? { anchor } : {}),
   };
 }
 
@@ -110,7 +136,7 @@ export async function POST(req: NextRequest) {
 
     const completionPromise = getAiClient().chat.completions.create({
       model: AI_MODEL,
-      max_tokens: 360,
+      max_tokens: 900,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -124,15 +150,26 @@ export async function POST(req: NextRequest) {
 Create exactly 8 turns total, alternating coach then user.
 Each turn must be one short sentence, 8-16 words.
 Use speaker values exactly: "coach" and "user".
-Do not include a "hint" field.
+
+IMPORTANT — keep coach turns self-contained so the learner can answer freely:
+- Each COACH turn must be a question about the topic that makes sense no matter how the learner answered the previous turn.
+- Do NOT have the coach react to or restate the specific content of the learner's expected answer (e.g. avoid "Checking your phone is common — do you read news too?").
+- A short neutral acknowledgment ("Great." / "Thanks.") before a new question is fine, but the question itself must stand on its own.
+- The questions should still progress naturally through the topic, like an interviewer asking a related series of questions.
+
+For every USER turn, also provide:
+- "intent": the communicative function in a few words (e.g. "describe a past routine", "give an opinion").
+- "keyPoints": 2-3 short acceptable answer directions a learner could mention (not exact wording).
+- "sampleAnswer": one natural model answer (this is the same idea as "text").
+Coach turns must NOT include intent/keyPoints/sampleAnswer.
 
 Return valid JSON with this exact shape:
 {
   "topic": "string",
   "category": "string",
-  "lines": [
-    ["coach", "string"],
-    ["user", "string"]
+  "turns": [
+    { "speaker": "coach", "text": "string" },
+    { "speaker": "user", "text": "string", "intent": "string", "keyPoints": ["string"], "sampleAnswer": "string" }
   ]
 }`,
         },
@@ -146,7 +183,7 @@ Return valid JSON with this exact shape:
     const completion = await Promise.race([completionPromise, timeoutPromise]);
 
     const raw = completion.choices[0]?.message?.content ?? "";
-    const script = normalizeScript(JSON.parse(raw), resolvedCategory);
+    const script = ensureAnchors(normalizeScript(JSON.parse(raw), resolvedCategory));
 
     return NextResponse.json(script);
   } catch (error) {
@@ -155,6 +192,6 @@ Return valid JSON with this exact shape:
     const fallback =
       FALLBACK_SCRIPTS.find((s) => s.category === resolvedCategory) ??
       FALLBACK_SCRIPTS[0];
-    return NextResponse.json(fallback);
+    return NextResponse.json(ensureAnchors(fallback));
   }
 }

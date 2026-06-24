@@ -78,11 +78,23 @@ export interface PronunciationCoachFeedback {
   retryPrompt: string;
 }
 
+/**
+ * Pre-generated acceptable-answer space for a coach question.
+ * Powers the "produce first, reveal later" flow and lenient direction judging.
+ * All fields optional at the boundary — older scripts have no anchor.
+ */
+export interface CoachPromptAnchor {
+  intent: string; // communicative function, e.g. "describe a past routine"
+  keyPoints: string[]; // 2–3 acceptable answer directions
+  sampleAnswer: string; // model answer, revealed after the user produces
+}
+
 export interface ScriptTurn {
   speaker: "coach" | "user";
   text: string;
   hint?: string;
   flowGuide?: ConnectedSpeechGuide;
+  anchor?: CoachPromptAnchor;
 }
 
 export interface Script {
@@ -94,6 +106,8 @@ export interface Script {
 export interface TurnResult {
   turnIndex: number;
   passed: boolean;
+  scaffoldLevel?: number; // 0–4: how much support the user needed this turn
+  hintsUsed?: number; // number of times the user dropped a scaffold rung
 }
 
 export interface Session {
@@ -107,6 +121,8 @@ export interface Session {
   failedLines: number;
   summary: string;
   completedAt: string;
+  avgScaffoldLevel?: number; // mean scaffold rung across user turns (lower = more independent)
+  expressionItemsMastered?: number; // reserved for Phase 3 closed-loop tracking
 }
 
 export interface DailyRecord {

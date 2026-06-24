@@ -82,6 +82,90 @@ function fallbackFeedback(
   };
 }
 
+/**
+ * Practice (free-expression) fallback: coach the learner's OWN sentence, never
+ * grade it against a fixed model answer.
+ */
+export function freeFallbackFeedback(transcript: string): PronunciationCoachFeedback {
+  const said = transcript.trim();
+  if (!said) {
+    return {
+      summary: "I didn't catch that — give it another go.",
+      tips: [{
+        type: "naturalness",
+        advice: "Say a full sentence answering the question in your own words.",
+        practiceText: "Let me think… I usually…",
+      }],
+      retryPrompt: "Take your time and answer in one full sentence.",
+    };
+  }
+  return {
+    summary: "Nice — that answers the question. Here's one small upgrade.",
+    tips: [{
+      type: "naturalness",
+      advice: "Say your sentence again as one smooth phrase, keeping the small words light.",
+      practiceText: said,
+    }],
+    retryPrompt: "Say it once more, a little more smoothly and confidently.",
+  };
+}
+
+async function handleFreeExpression(
+  transcript: string,
+  question: string,
+  modelAnswer: string
+): Promise<PronunciationCoachFeedback> {
+  if (!hasAiApiKey || !transcript) {
+    return freeFallbackFeedback(transcript);
+  }
+
+  try {
+    const completion = await getAiClient().chat.completions.create({
+      model: AI_MODEL,
+      max_tokens: 260,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a warm, concise English speaking coach for B1-B2 learners practicing free speaking. The learner answered a question in their OWN words. Evaluate the sentence THEY said — never grade it against a fixed answer. Return valid JSON only.",
+        },
+        {
+          role: "user",
+          content: `The coach asked: ${JSON.stringify(question)}
+The learner said: ${JSON.stringify(transcript)}
+A natural model answer, for YOUR reference only (do NOT require the learner to match it): ${JSON.stringify(modelAnswer)}
+
+Give feedback ON WHAT THE LEARNER SAID:
+{
+  "summary": "one warm sentence: does their answer fit the question, said naturally?",
+  "tips": [
+    {"type": "naturalness", "target": "their word or phrase", "advice": "improve THEIR sentence: grammar, word choice, or natural phrasing", "practiceText": "a short improved version of THEIR phrase to repeat"}
+  ],
+  "retryPrompt": "one short encouraging instruction"
+}
+
+Rules:
+- Coach THEIR sentence, quoting their words. Do not tell them to say the model answer.
+- At most 2 tips. If their sentence is already good, say so and offer one small upgrade.
+- practiceText must be a short, speakable improvement of THEIR own words.
+- If their answer is off-topic, gently point them back to the question.
+- Do not mention the model answer, Azure, JSON, scores, or APIs.
+- Keep each advice under 22 words.`,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as unknown;
+    if (isCoachFeedback(parsed)) {
+      return { ...parsed, tips: parsed.tips.slice(0, 2) };
+    }
+  } catch (error) {
+    console.warn("[pronunciation-coach:free] fallback due to:", error instanceof Error ? error.message : error);
+  }
+  return freeFallbackFeedback(transcript);
+}
+
 function isCoachFeedback(value: unknown): value is PronunciationCoachFeedback {
   if (!value || typeof value !== "object") return false;
   const feedback = value as Partial<PronunciationCoachFeedback>;
@@ -105,10 +189,21 @@ export async function POST(req: NextRequest) {
     assessment?: PronunciationAssessment;
     connectedSpeechGuide?: unknown;
     connectedSpeechAnalysis?: ConnectedSpeechAnalysis;
+    mode?: "free";
+    question?: string;
+    modelAnswer?: string;
   };
 
   const referenceText = body.referenceText?.trim() ?? "";
   const transcript = body.transcript?.trim() ?? "";
+
+  // Free-expression (practice) coaching: judge the learner's own sentence,
+  // not the model answer.
+  if (body.mode === "free") {
+    return NextResponse.json(
+      await handleFreeExpression(transcript, body.question?.trim() ?? "", body.modelAnswer?.trim() ?? "")
+    );
+  }
   const assessment = body.assessment;
   const connectedSpeechGuide = normalizeConnectedSpeechGuide(body.connectedSpeechGuide, referenceText) ?? undefined;
   const connectedSpeechAnalysis = body.connectedSpeechAnalysis ?? (

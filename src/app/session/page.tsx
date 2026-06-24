@@ -6,7 +6,9 @@ import { v4 as uuidv4 } from "uuid";
 import CoachLine from "@/components/CoachLine";
 import FlowGuide from "@/components/FlowGuide";
 import MicButton from "@/components/MicButton";
+import PromptScaffold from "@/components/PromptScaffold";
 import SessionSummary from "@/components/SessionSummary";
+import SpeedRound from "@/components/SpeedRound";
 import { getBuiltinScripts, getImmediateFileScript, getImmediateScript, getScriptKey, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES, upsertFileCachedScript } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type {
@@ -56,8 +58,8 @@ type Action =
   | { type: "SCRIPT_LOADED"; script: Script }
   | { type: "START_CONVERSATION" }
   | { type: "COACH_DONE" }
-  | { type: "EVAL_RESULT"; passed: boolean; turnIndex: number }
-  | { type: "PASS_HOLD"; turnIndex: number }
+  | { type: "EVAL_RESULT"; passed: boolean; turnIndex: number; scaffoldLevel?: number; hintsUsed?: number }
+  | { type: "PASS_HOLD"; turnIndex: number; scaffoldLevel?: number; hintsUsed?: number }
   | { type: "ADVANCE_AFTER_PASS" }
   | { type: "PRACTICE_REPEAT_RESULT"; passed: boolean }
   | { type: "FLOW_GUIDE_READY"; turnIndex: number; guide: ConnectedSpeechGuide }
@@ -216,6 +218,8 @@ function reducer(state: State, action: Action): State {
       const result: TurnResult = {
         turnIndex: action.turnIndex,
         passed: true,
+        ...(action.scaffoldLevel !== undefined ? { scaffoldLevel: action.scaffoldLevel } : {}),
+        ...(action.hintsUsed !== undefined ? { hintsUsed: action.hintsUsed } : {}),
       };
       return {
         ...state,
@@ -274,6 +278,8 @@ function reducer(state: State, action: Action): State {
         const result: TurnResult = {
           turnIndex: action.turnIndex,
           passed: action.passed,
+          ...(action.scaffoldLevel !== undefined ? { scaffoldLevel: action.scaffoldLevel } : {}),
+          ...(action.hintsUsed !== undefined ? { hintsUsed: action.hintsUsed } : {}),
         };
         return {
           ...state,
@@ -323,6 +329,8 @@ export default function SessionPage() {
   const [tipPracticeResults, setTipPracticeResults] = useState<Record<string, TipPracticeResult>>({});
   const [playingTtsSource, setPlayingTtsSource] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>("practice");
+  const [hintTier, setHintTier] = useState(0);
+  const hintTierRef = useRef(0);
   const [coachVoiceWarmup, setCoachVoiceWarmup] = useState<CoachVoiceWarmupStatus>("idle");
   const [userRecordings, setUserRecordings] = useState<Record<number, UserRecording>>({});
   const [flowGuides, setFlowGuides] = useState<Record<string, ConnectedSpeechGuide | null>>({});
@@ -421,6 +429,29 @@ export default function SessionPage() {
         }
       } catch (error) {
         console.warn("[coach-feedback] failed:", error);
+      } finally {
+        setCoachFeedbackLoading(false);
+      }
+    },
+    []
+  );
+
+  const fetchFreeCoachFeedback = useCallback(
+    async (transcript: string, question: string, modelAnswer: string) => {
+      setCoachFeedbackLoading(true);
+      setCoachFeedback(null);
+      try {
+        const response = await fetch("/api/pronunciation-coach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "free", transcript, question, modelAnswer }),
+        });
+        const data = await response.json() as PronunciationCoachFeedback & { error?: string };
+        if (response.ok && !data.error) {
+          setCoachFeedback(data);
+        }
+      } catch (error) {
+        console.warn("[coach-feedback:free] failed:", error);
       } finally {
         setCoachFeedbackLoading(false);
       }
@@ -698,6 +729,12 @@ export default function SessionPage() {
 
     const totalLines = state.userTurnIndices.length;
     const passedLines = state.results.filter((r) => r.passed).length;
+    const scaffoldLevels = state.results
+      .map((r) => r.scaffoldLevel)
+      .filter((v): v is number => v !== undefined);
+    const avgScaffoldLevel = scaffoldLevels.length > 0
+      ? scaffoldLevels.reduce((a, b) => a + b, 0) / scaffoldLevels.length
+      : undefined;
 
     // Save session to localStorage
     const session = {
@@ -711,6 +748,7 @@ export default function SessionPage() {
       failedLines: totalLines - passedLines,
       summary: "",
       completedAt: new Date().toISOString(),
+      ...(avgScaffoldLevel !== undefined ? { avgScaffoldLevel } : {}),
     };
 
     try {
@@ -752,6 +790,9 @@ export default function SessionPage() {
       const previousCoachLine = getPreviousCoachLine(script.turns, currentScriptIndex);
       const connectedSpeechGuide = flowGuides[getFlowGuideKey(referenceText, previousCoachLine)] ?? null;
       const isPracticeRepeat = mode === "practice" && state.pendingPassAdvance;
+      // In practice mode the user produces freely; record how much scaffolding they needed.
+      const scaffoldLevel = mode === "practice" ? hintTierRef.current : undefined;
+      const hintsUsed = mode === "practice" ? hintTierRef.current : undefined;
 
       dispatch({ type: "EVALUATING", value: true });
       try {
@@ -762,15 +803,25 @@ export default function SessionPage() {
           pass = assessment.pass;
           await fetchCoachFeedback(referenceText, transcript, assessment, connectedSpeechGuide);
         } else {
-          // Practice mode: semantic / lenient evaluation
+          // Practice mode: semantic / lenient direction evaluation against the anchor
           const res = await fetch("/api/evaluate-line", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expected: referenceText, actual: transcript }),
+            body: JSON.stringify({
+              expected: expectedTurn.anchor?.sampleAnswer ?? referenceText,
+              actual: transcript,
+              ...(expectedTurn.anchor ? { anchor: expectedTurn.anchor } : {}),
+            }),
           });
           const data = await res.json() as { pass: boolean };
           pass = data.pass;
-          await fetchCoachFeedback(referenceText, transcript, undefined, connectedSpeechGuide);
+          // Free-expression coaching: evaluate what the user actually said,
+          // with the model answer only as reference.
+          await fetchFreeCoachFeedback(
+            transcript,
+            previousCoachLine,
+            expectedTurn.anchor?.sampleAnswer ?? referenceText
+          );
         }
 
         if (isPracticeRepeat) {
@@ -779,7 +830,7 @@ export default function SessionPage() {
         }
 
         if (pass) {
-          dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex });
+          dispatch({ type: "PASS_HOLD", turnIndex: currentScriptIndex, scaffoldLevel, hintsUsed });
           if (passAdvanceTimeoutRef.current) clearTimeout(passAdvanceTimeoutRef.current);
           if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
           passAdvanceTimeoutRef.current = null;
@@ -791,17 +842,17 @@ export default function SessionPage() {
         if (passAdvanceCountdownRef.current) clearInterval(passAdvanceCountdownRef.current);
         passAdvanceTimeoutRef.current = null;
         passAdvanceCountdownRef.current = null;
-        dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex });
+        dispatch({ type: "EVAL_RESULT", passed: false, turnIndex: currentScriptIndex, scaffoldLevel, hintsUsed });
       } catch {
         // Fail-open: don't block the user on evaluation errors
         if (isPracticeRepeat) {
           dispatch({ type: "PRACTICE_REPEAT_RESULT", passed: true });
         } else {
-          dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex });
+          dispatch({ type: "EVAL_RESULT", passed: true, turnIndex: currentScriptIndex, scaffoldLevel, hintsUsed });
         }
       }
     },
-    [fetchCoachFeedback, flowGuides, mode, saveUserRecording, state]
+    [fetchCoachFeedback, fetchFreeCoachFeedback, flowGuides, mode, saveUserRecording, state]
   );
 
   const handleNoSpeech = useCallback(() => {
@@ -835,9 +886,19 @@ export default function SessionPage() {
     const timeout = setTimeout(() => {
       clearSessionUiState();
       dispatch({ type: "CLEAR_FEEDBACK" });
+      setHintTier(0);
+      hintTierRef.current = 0;
     }, 0);
     return () => clearTimeout(timeout);
   }, [clearSessionUiState, state.currentScriptIndex]);
+
+  const revealHint = useCallback(() => {
+    setHintTier((current) => {
+      const next = Math.min(2, current + 1);
+      hintTierRef.current = next;
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1019,8 +1080,8 @@ export default function SessionPage() {
             </div>
             <p className="text-xs text-gray-400 text-center">
               {mode === "practice"
-                ? "Lenient — pass on similar meaning"
-                : "Strict — Azure scores your actual pronunciation"}
+                ? "Say it your own way — the coach checks your meaning, answer revealed after"
+                : "Read the shown sentence — Azure scores your pronunciation"}
             </p>
           </div>
 
@@ -1054,6 +1115,20 @@ export default function SessionPage() {
     const flowGuideKey = referenceText ? getFlowGuideKey(referenceText, previousCoachLine) : "";
     const currentFlowGuide = flowGuideKey ? flowGuides[flowGuideKey] : null;
     const flowGuideLoading = Boolean(flowGuideKey && flowGuideLoadingKeys[flowGuideKey]);
+
+    // Produce-first (practice mode): hide the model answer until the user has spoken
+    // or explicitly asked for it via the hint ladder. Assessment mode is a
+    // pronunciation drill, so the reference stays visible throughout.
+    const currentAnchor = isUserTurn ? currentTurn.anchor : undefined;
+    const revealText = currentAnchor?.sampleAnswer ?? referenceText;
+    const hasProduced = lastTranscript !== null;
+    const showReference = mode === "assessment" || hasProduced || hintTier >= 2;
+    const showScaffold = mode === "practice" && !hasProduced && Boolean(currentAnchor);
+    // The model line's connected-speech guide only makes sense when the user is
+    // reading that exact line (assessment). In free practice, coaching targets
+    // the user's own sentence instead.
+    const showFlowGuide = mode === "assessment";
+    const referenceLabel = mode === "practice" && hasProduced ? "A natural way to say it:" : "You can say:";
 
     return (
       <div className="min-h-screen flex flex-col">
@@ -1118,29 +1193,36 @@ export default function SessionPage() {
                 </div>
               )}
 
-              {/* Reference line with listen button */}
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 w-full">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 text-center">
-                    <p className="text-xs text-gray-400 mb-1">You can say:</p>
-                    <p className="text-gray-800 font-medium leading-relaxed">
-                      {referenceText}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => speakLine(referenceText, "reference-answer")}
-                    disabled={Boolean(playingTtsSource)}
-                    title="Hear it"
-                    className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
-                  >
-                    {playingTtsSource === "reference-answer" ? (
-                      <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
-                    ) : "🔊"}
-                  </button>
-                </div>
-              </div>
+              {/* Produce-first scaffold (practice mode, before the user speaks) */}
+              {showScaffold && currentAnchor && (
+                <PromptScaffold anchor={currentAnchor} tier={hintTier} onHint={revealHint} />
+              )}
 
-              {(currentFlowGuide || flowGuideLoading) && (
+              {/* Reference line with listen button (revealed after producing, or always in assessment) */}
+              {showReference && (
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 w-full">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 text-center">
+                      <p className="text-xs text-gray-400 mb-1">{referenceLabel}</p>
+                      <p className="text-gray-800 font-medium leading-relaxed">
+                        {revealText}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => speakLine(revealText, "reference-answer")}
+                      disabled={Boolean(playingTtsSource)}
+                      title="Hear it"
+                      className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 text-blue-600 flex items-center justify-center transition-colors text-lg"
+                    >
+                      {playingTtsSource === "reference-answer" ? (
+                        <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+                      ) : "🔊"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {showFlowGuide && (currentFlowGuide || flowGuideLoading) && (
                 <FlowGuide guide={currentFlowGuide} loading={flowGuideLoading} />
               )}
 
@@ -1346,6 +1428,22 @@ export default function SessionPage() {
                     <p className="mt-2 text-sm text-indigo-600">Thinking about your pronunciation...</p>
                   )}
                 </div>
+              )}
+
+              {/* Speed round (practice mode, after the model answer is revealed) */}
+              {mode === "practice" && hasProduced && revealText && (
+                <SpeedRound
+                  key={state.currentScriptIndex}
+                  targetText={revealText}
+                  firstAttempt={
+                    userRecordings[state.currentScriptIndex]
+                      ? {
+                          url: userRecordings[state.currentScriptIndex].url,
+                          durationMs: userRecordings[state.currentScriptIndex].durationMs,
+                        }
+                      : undefined
+                  }
+                />
               )}
 
               {/* Text input fallback */}

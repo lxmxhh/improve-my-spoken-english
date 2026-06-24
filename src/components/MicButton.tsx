@@ -17,6 +17,8 @@ interface MicButtonProps {
   mode?: PracticeMode;
   referenceText?: string;
   variant?: "default" | "compact";
+  /** Overrides the auto-estimated recording window (used by the speed round). */
+  timeBudgetMs?: number;
 }
 
 type MicState = "idle" | "listening" | "processing";
@@ -153,6 +155,7 @@ export default function MicButton({
   mode = "practice",
   referenceText,
   variant = "default",
+  timeBudgetMs,
 }: MicButtonProps) {
   const [micState, setMicState] = useState<MicState>("idle");
   const [countdown, setCountdown] = useState(AUTO_STOP_MS / 1000);
@@ -381,7 +384,7 @@ export default function MicButton({
       }
 
       recordingStartedAtRef.current = Date.now();
-      const recordingLimitMs = estimateRecordingLimitMs(referenceText);
+      const recordingLimitMs = timeBudgetMs ?? estimateRecordingLimitMs(referenceText);
       recordingLimitMsRef.current = recordingLimitMs;
       setRecordingLimitSec(Math.ceil(recordingLimitMs / 1000));
       setState("listening");

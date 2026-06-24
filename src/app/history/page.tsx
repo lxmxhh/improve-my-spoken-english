@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ProgressOverview from "@/components/ProgressOverview";
 import { getSessions } from "@/lib/storage";
 import type { Session } from "@/lib/types";
 
@@ -14,10 +15,12 @@ function groupByDate(sessions: Session[]): Record<string, Session[]> {
 
 export default function HistoryPage() {
   const [groups, setGroups] = useState<[string, Session[]][]>([]);
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     const sessions = getSessions();
+    setAllSessions(sessions);
     const grouped = groupByDate(sessions);
     const sorted = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0]));
     setGroups(sorted);
@@ -44,6 +47,8 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen px-4 py-10 max-w-lg mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Practice History</h1>
+
+      <ProgressOverview sessions={allSessions} />
 
       <div className="flex flex-col gap-6">
         {groups.map(([date, sessions]) => (

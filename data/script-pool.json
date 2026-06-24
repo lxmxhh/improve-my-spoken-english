@@ -1894,6 +1894,154 @@
           "text": "I will! Maybe chocolate chip cookies—I love them and want to make them myself."
         }
       ]
+    },
+    {
+      "topic": "Making Morning Routines More Enjoyable",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey! Let’s talk about mornings—what’s one small thing you enjoy doing right after waking up?"
+        },
+        {
+          "speaker": "user",
+          "text": "I usually drink a cup of warm tea while looking out the window.",
+          "anchor": {
+            "intent": "describe a current habit",
+            "keyPoints": [
+              "drinking something warm",
+              "observing nature or surroundings",
+              "taking quiet time"
+            ],
+            "sampleAnswer": "I usually drink a cup of warm tea while looking out the window."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That sounds peaceful! Do you ever change your morning routine on weekends?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, I sleep a little longer and sometimes cook pancakes for breakfast.",
+          "anchor": {
+            "intent": "compare weekday vs weekend habits",
+            "keyPoints": [
+              "sleeping later",
+              "cooking special food",
+              "slower pace"
+            ],
+            "sampleAnswer": "Yes, I sleep a little longer and sometimes cook pancakes for breakfast."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Nice! What’s one tiny change that made your mornings feel better recently?"
+        },
+        {
+          "speaker": "user",
+          "text": "I started playing soft music while getting ready—it helps me relax.",
+          "anchor": {
+            "intent": "explain a recent positive change",
+            "keyPoints": [
+              "adding background music",
+              "feeling calmer",
+              "improving mood"
+            ],
+            "sampleAnswer": "I started playing soft music while getting ready—it helps me relax."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s such a smart idea—music really sets the tone for the day!"
+        },
+        {
+          "speaker": "user",
+          "text": "Thanks! Now I try to smile more during my morning routine too.",
+          "anchor": {
+            "intent": "share a personal improvement strategy",
+            "keyPoints": [
+              "practicing positivity",
+              "smiling intentionally",
+              "building confidence"
+            ],
+            "sampleAnswer": "Thanks! Now I try to smile more during my morning routine too."
+          }
+        }
+      ]
+    },
+    {
+      "topic": "Making Healthy Breakfast Choices",
+      "category": "Daily Life",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Let’s talk about breakfast — what’s one healthy thing you usually eat in the morning?"
+        },
+        {
+          "speaker": "user",
+          "text": "I often have oatmeal with banana and a little honey.",
+          "anchor": {
+            "intent": "describe a current habit",
+            "keyPoints": [
+              "oatmeal",
+              "fruit like banana or apple",
+              "natural sweetener like honey or cinnamon"
+            ],
+            "sampleAnswer": "I often have oatmeal with banana and a little honey."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That sounds delicious and energizing! Do you prepare it yourself or does someone else make it?"
+        },
+        {
+          "speaker": "user",
+          "text": "I make it every day before work because it’s quick and keeps me full.",
+          "anchor": {
+            "intent": "explain a routine and reason",
+            "keyPoints": [
+              "make it myself",
+              "before work or school",
+              "reason: quick / filling / healthy"
+            ],
+            "sampleAnswer": "I make it every day before work because it’s quick and keeps me full."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Great habit! What’s something new you’d like to try for breakfast this month?"
+        },
+        {
+          "speaker": "user",
+          "text": "Maybe Greek yogurt with berries and nuts — it looks tasty and nutritious.",
+          "anchor": {
+            "intent": "express a future intention",
+            "keyPoints": [
+              "Greek yogurt",
+              "berries like strawberries or blueberries",
+              "nuts like almonds or walnuts"
+            ],
+            "sampleAnswer": "Maybe Greek yogurt with berries and nuts — it looks tasty and nutritious."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Love that idea! Would you like help planning a simple weekly breakfast menu together?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, please — I want to eat healthier but also save time in the mornings.",
+          "anchor": {
+            "intent": "make a request and state a personal goal",
+            "keyPoints": [
+              "yes + polite phrase",
+              "healthier eating",
+              "save time / less stress"
+            ],
+            "sampleAnswer": "Yes, please — I want to eat healthier but also save time in the mornings."
+          }
+        }
+      ]
     }
   ],
   "Work & Career": [
@@ -3460,6 +3608,80 @@
         {
           "speaker": "user",
           "text": "That makes me feel more ready—I’ll practice those verbs with different jobs tonight."
+        }
+      ]
+    },
+    {
+      "topic": "Handling constructive feedback at work",
+      "category": "Work & Career",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hi there! Today let’s talk about how you handle feedback from your manager or coworkers."
+        },
+        {
+          "speaker": "user",
+          "text": "I usually feel nervous when my boss gives me feedback, but I try to listen carefully.",
+          "anchor": {
+            "intent": "describe a personal reaction and response",
+            "keyPoints": [
+              "feels nervous or anxious",
+              "tries to stay open-minded",
+              "listens actively"
+            ],
+            "sampleAnswer": "I usually feel nervous when my boss gives me feedback, but I try to listen carefully."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s completely normal — many people feel that way at first. What helps you stay calm?"
+        },
+        {
+          "speaker": "user",
+          "text": "Taking deep breaths and reminding myself it’s about improving, not criticism.",
+          "anchor": {
+            "intent": "explain a coping strategy",
+            "keyPoints": [
+              "uses breathing techniques",
+              "reframes feedback positively",
+              "focuses on growth"
+            ],
+            "sampleAnswer": "Taking deep breaths and reminding myself it’s about improving, not criticism."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Great mindset! Can you share one time feedback actually helped you do better?"
+        },
+        {
+          "speaker": "user",
+          "text": "Last month, my team said my presentations were too fast, so now I pause more often.",
+          "anchor": {
+            "intent": "give a specific past example",
+            "keyPoints": [
+              "mentions a real work situation",
+              "describes the feedback received",
+              "explains the change made"
+            ],
+            "sampleAnswer": "Last month, my team said my presentations were too fast, so now I pause more often."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s fantastic progress — small changes really add up over time. How do you ask for feedback yourself?"
+        },
+        {
+          "speaker": "user",
+          "text": "I sometimes say, 'Could you tell me one thing I could improve next time?'",
+          "anchor": {
+            "intent": "report a practical language strategy",
+            "keyPoints": [
+              "uses a polite question phrase",
+              "asks for one clear suggestion",
+              "applies it in real situations"
+            ],
+            "sampleAnswer": "I sometimes say, 'Could you tell me one thing I could improve next time?'"
+          }
         }
       ]
     }
@@ -8401,6 +8623,80 @@
               "reason": "final word signals completion of intention"
             },
             "teachingPrompt": "Say it smoothly—link 'want to' as 'wanna', and drop your voice on 'English'."
+          }
+        }
+      ]
+    },
+    {
+      "topic": "How streaming changed the way we watch TV shows",
+      "category": "Entertainment & Culture",
+      "turns": [
+        {
+          "speaker": "coach",
+          "text": "Hey there! Let’s talk about how streaming services changed TV watching habits."
+        },
+        {
+          "speaker": "user",
+          "text": "I think it’s easier now to watch shows whenever I want without waiting for schedules.",
+          "anchor": {
+            "intent": "give an opinion",
+            "keyPoints": [
+              "more control over timing",
+              "no fixed broadcast schedules",
+              "watch anytime, anywhere"
+            ],
+            "sampleAnswer": "I think it’s easier now to watch shows whenever I want without waiting for schedules."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "That’s a great point—flexibility is definitely one big change. What’s your favorite show to binge?"
+        },
+        {
+          "speaker": "user",
+          "text": "My favorite is 'Stranger Things' because it has exciting stories and cool 80s music.",
+          "anchor": {
+            "intent": "describe a personal preference",
+            "keyPoints": [
+              "name a show",
+              "mention plot or mood",
+              "highlight music or visuals"
+            ],
+            "sampleAnswer": "My favorite is 'Stranger Things' because it has exciting stories and cool 80s music."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Nice choice! Did you watch it all at once, or did you space it out week by week?"
+        },
+        {
+          "speaker": "user",
+          "text": "I watched two episodes each evening so I wouldn’t get too tired or overwhelmed.",
+          "anchor": {
+            "intent": "describe a viewing habit",
+            "keyPoints": [
+              "number of episodes per session",
+              "reason for pacing",
+              "time of day"
+            ],
+            "sampleAnswer": "I watched two episodes each evening so I wouldn’t get too tired or overwhelmed."
+          }
+        },
+        {
+          "speaker": "coach",
+          "text": "Smart strategy! How do you usually find new shows—through friends, ads, or recommendations?"
+        },
+        {
+          "speaker": "user",
+          "text": "I mostly discover new shows from Netflix suggestions and my sister’s recommendations.",
+          "anchor": {
+            "intent": "explain a source of discovery",
+            "keyPoints": [
+              "use platform algorithms",
+              "get suggestions from family/friends",
+              "browse categories or trailers"
+            ],
+            "sampleAnswer": "I mostly discover new shows from Netflix suggestions and my sister’s recommendations."
           }
         }
       ]

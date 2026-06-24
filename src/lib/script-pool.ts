@@ -1,3 +1,4 @@
+import { ensureAnchors } from "./anchor";
 import FALLBACK_SCRIPTS from "./fallback-scripts";
 import type { Script, ScriptTurn } from "./types";
 
@@ -223,7 +224,7 @@ export function isValidScript(value: unknown): value is Script {
 }
 
 export function getBuiltinScripts(): Script[] {
-  return BUILTIN_SCRIPTS;
+  return BUILTIN_SCRIPTS.map(ensureAnchors);
 }
 
 export function getScriptKey(script: Script) {
@@ -301,9 +302,9 @@ function getReviewScript(category: string, candidates: Script[]): Script | null 
 export function getImmediateScript(category: string): Script {
   const candidates = getCategoryScripts(category);
   const reviewScript = getReviewScript(category, candidates);
-  if (reviewScript) return reviewScript;
+  if (reviewScript) return ensureAnchors(reviewScript);
 
-  return randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS);
+  return ensureAnchors(randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS));
 }
 
 export function getCachedScriptCount(category: string): number {
@@ -381,8 +382,8 @@ export async function getImmediateFileScript(category: string): Promise<Script> 
       .filter((record) => record.script.category === category)
       .map((record) => record.script);
     const reviewScript = getReviewScript(category, candidates);
-    if (reviewScript) return reviewScript;
-    return randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS);
+    if (reviewScript) return ensureAnchors(reviewScript);
+    return ensureAnchors(randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS));
   } catch {
     return getImmediateScript(category);
   }
