@@ -11,7 +11,13 @@ import {
 } from "@/lib/script-pool";
 import type { Script, ScriptTurn } from "@/lib/types";
 
-type SourceFilter = "all" | "builtin" | "cached";
+const SOURCE_LABELS: Record<AdminScriptRecord["source"], string> = {
+  seed: "Seed",
+  cached: "Runtime",
+  builtin: "Built-in",
+};
+
+type SourceFilter = "all" | "seed" | "builtin" | "cached";
 
 interface EditorState {
   mode: "create" | "edit" | "view";
@@ -124,9 +130,10 @@ export default function AdminPage() {
   }, []);
 
   const counts = useMemo(() => {
+    const seed = records.filter((record) => record.source === "seed").length;
     const cached = records.filter((record) => record.source === "cached").length;
     const builtin = records.filter((record) => record.source === "builtin").length;
-    return { total: records.length, cached, builtin };
+    return { total: records.length, seed, cached, builtin };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -217,10 +224,11 @@ export default function AdminPage() {
               Admin
             </h1>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center sm:w-96">
+          <div className="grid grid-cols-4 gap-2 text-center sm:w-[28rem]">
             {[
               ["Total", counts.total],
-              ["Local", counts.cached],
+              ["Seed", counts.seed],
+              ["Runtime", counts.cached],
               ["Built-in", counts.builtin],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
@@ -274,7 +282,8 @@ export default function AdminPage() {
                     className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   >
                     <option value="all">All sources</option>
-                    <option value="cached">Local only</option>
+                    <option value="seed">Seed only</option>
+                    <option value="cached">Runtime only</option>
                     <option value="builtin">Built-in only</option>
                   </select>
                 </div>
@@ -320,9 +329,11 @@ export default function AdminPage() {
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                             record.source === "cached"
                               ? "bg-emerald-50 text-emerald-700"
-                              : "bg-gray-100 text-gray-500"
+                              : record.source === "seed"
+                                ? "bg-blue-50 text-blue-700"
+                                : "bg-gray-100 text-gray-500"
                           }`}>
-                            {record.source === "cached" ? "Local" : "Built-in"}
+                            {SOURCE_LABELS[record.source]}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-gray-400">

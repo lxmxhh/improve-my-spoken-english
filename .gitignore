@@ -43,3 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# runtime script cache (seed lives in data/script-seed.json)
+/data/script-pool.json

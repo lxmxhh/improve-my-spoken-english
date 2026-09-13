@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pool:promote": "node scripts/promote-pool.mjs"
   },
   "dependencies": {
     "microsoft-cognitiveservices-speech-sdk": "^1.50.0",

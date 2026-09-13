@@ -137,9 +137,11 @@ const BUILTIN_SCRIPTS: Script[] = [
 
 type ScriptPool = Partial<Record<string, Script[]>>;
 
+export type ScriptSource = "seed" | "cached" | "builtin";
+
 export interface AdminScriptRecord {
   key: string;
-  source: "builtin" | "cached";
+  source: ScriptSource;
   script: Script;
 }
 
@@ -525,7 +527,7 @@ export async function refillScriptPool(category: string, targetCount = REFILL_TA
   try {
     const records = await fetchScriptRecords();
     currentCount = records.filter((record) => (
-      record.source === "cached" && record.script.category === category
+      record.source !== "builtin" && record.script.category === category
     )).length;
   } catch {
     currentCount = getCachedScriptCount(category);
