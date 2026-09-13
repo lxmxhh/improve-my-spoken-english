@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Script } from "./types";
 
 const execFileAsync = promisify(execFile);
 const CACHE_DIR = process.env.TTS_CACHE_DIR ?? join(process.cwd(), "data", "tts-cache");
-const ALLOWED_PROVIDER_NAMES = new Set(["qwen", "macos", "kokoro"]);
+const ALLOWED_PROVIDER_NAMES = new Set(["qwen", "macos"]);
 const DEBUG_TTS = process.env.DEBUG_TTS === "1";
 const TTS_PROVIDER = process.env.TTS_PROVIDER ?? "qwen";
 // "multimodal": DashScope Qwen3-TTS (services/aigc/multimodal-generation/generation).
@@ -25,15 +25,8 @@ const QWEN_TTS_API_KEY =
   process.env.DASHSCOPE_API_KEY ??
   process.env.AI_API_KEY ??
   "";
-const KOKORO_MODEL = "kokoro-82m";
-const KOKORO_PYTHON = process.env.KOKORO_PYTHON ?? "python3";
-const KOKORO_SCRIPT = process.env.KOKORO_SCRIPT ?? join(process.cwd(), "scripts", "tts", "kokoro_tts.py");
-const KOKORO_VOICE = process.env.KOKORO_VOICE ?? "af_heart";
-const KOKORO_LANG = process.env.KOKORO_LANG ?? "a";
-const KOKORO_SPEED = Number(process.env.KOKORO_SPEED ?? "1");
-const KOKORO_TIMEOUT_MS = Number(process.env.KOKORO_TIMEOUT_MS ?? "30000");
 
-export type TtsProvider = "qwen" | "macos" | "kokoro";
+export type TtsProvider = "qwen" | "macos";
 type QwenTtsApi = "multimodal" | "speech-synthesizer";
 type AudioFormat = "wav" | "mp3";
 
@@ -50,14 +43,12 @@ export interface GeneratedSpeech {
 interface SpeechOptions {
   voice?: string;
   qwenVoice?: string;
-  kokoroVoice?: string;
 }
 
 interface SpeechTarget {
   text: string;
   voice?: string;
   qwenVoice?: string;
-  kokoroVoice?: string;
 }
 
 interface CacheTarget {
@@ -69,7 +60,6 @@ interface CacheTarget {
   audioPath: string;
   voice: string;
   qwenVoice: string;
-  kokoroVoice: string;
 }
 
 export function getTtsProvider(): TtsProvider {
@@ -103,15 +93,6 @@ export async function generateCachedSpeech(
 
   // Fallback providers always produce wav, regardless of the configured qwen format.
   const wavPath = target.audioPath.replace(/\.[a-z0-9]+$/, ".wav");
-
-  if (target.provider === "kokoro") {
-    await generateKokoroSpeech({
-      text: safeText,
-      voice: target.kokoroVoice,
-      outputPath: wavPath,
-    });
-    return { audio: await readFile(wavPath), contentType: CONTENT_TYPES.wav };
-  }
 
   await generateMacSpeech({
     text: safeText,
@@ -152,17 +133,10 @@ async function prewarmSpeechTargets(targets: CacheTarget[]): Promise<void> {
 
   if (missing.length === 0) return;
 
-  const provider = missing[0].provider;
-  if (provider === "kokoro" && missing.every((target) => target.provider === "kokoro")) {
-    await generateKokoroSpeechBatch(missing);
-    return;
-  }
-
   for (const target of missing) {
     await generateCachedSpeech(target.text, {
       voice: target.voice,
       qwenVoice: target.qwenVoice,
-      kokoroVoice: target.kokoroVoice,
     });
   }
 }
@@ -171,19 +145,11 @@ function getCacheTarget({
   text,
   voice = "Samantha",
   qwenVoice = QWEN_TTS_VOICE,
-  kokoroVoice = KOKORO_VOICE,
 }: SpeechTarget): CacheTarget {
   const safeText = text.trim().slice(0, 600);
   const provider = getTtsProvider();
-  const sanitizedKokoroVoice = sanitizeKokoroVoice(kokoroVoice);
-  const cacheVoice =
-    provider === "qwen" ? qwenVoice : provider === "kokoro" ? sanitizedKokoroVoice : voice;
-  const cacheModel =
-    provider === "qwen"
-      ? QWEN_TTS_MODEL
-      : provider === "kokoro"
-        ? `${KOKORO_MODEL}:${KOKORO_LANG}:${Number.isFinite(KOKORO_SPEED) ? KOKORO_SPEED : 1}`
-        : "macos-say";
+  const cacheVoice = provider === "qwen" ? qwenVoice : voice;
+  const cacheModel = provider === "qwen" ? QWEN_TTS_MODEL : "macos-say";
   const format: AudioFormat = provider === "qwen" ? QWEN_TTS_FORMAT : "wav";
   // Keep the legacy hash input for wav so existing cache files stay valid.
   const hashInput =
@@ -201,7 +167,6 @@ function getCacheTarget({
     audioPath: join(CACHE_DIR, `${hash}.${format}`),
     voice,
     qwenVoice,
-    kokoroVoice: sanitizedKokoroVoice,
   };
 }
 
@@ -222,98 +187,6 @@ async function readCachedAudio(audioPath: string): Promise<Buffer | null> {
   } catch {
     return null;
   }
-}
-
-function sanitizeKokoroVoice(voice: string): string {
-  const normalized = voice.trim();
-  return /^[a-z][a-z0-9_]{1,48}$/i.test(normalized) ? normalized : KOKORO_VOICE;
-}
-
-async function generateKokoroSpeech({
-  text,
-  voice,
-  outputPath,
-}: {
-  text: string;
-  voice: string;
-  outputPath: string;
-}): Promise<void> {
-  const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}.wav`;
-
-  try {
-    await execFileAsync(
-      KOKORO_PYTHON,
-      [
-        KOKORO_SCRIPT,
-        "--text",
-        text,
-        "--voice",
-        voice,
-        "--lang",
-        KOKORO_LANG,
-        "--speed",
-        Number.isFinite(KOKORO_SPEED) ? String(KOKORO_SPEED) : "1",
-        "--output",
-        tempPath,
-      ],
-      getKokoroExecOptions()
-    );
-    await rename(tempPath, outputPath);
-  } catch (error) {
-    await unlink(tempPath).catch(() => {});
-    throw error;
-  }
-}
-
-async function generateKokoroSpeechBatch(targets: CacheTarget[]): Promise<void> {
-  const tempTargets = targets.map((target, index) => ({
-    text: target.text,
-    voice: target.kokoroVoice,
-    output: `${target.audioPath}.tmp-${process.pid}-${Date.now()}-${index}.wav`,
-    finalOutput: target.audioPath,
-  }));
-
-  try {
-    await execFileAsync(
-      KOKORO_PYTHON,
-      [
-        KOKORO_SCRIPT,
-        "--lang",
-        KOKORO_LANG,
-        "--speed",
-        Number.isFinite(KOKORO_SPEED) ? String(KOKORO_SPEED) : "1",
-        "--batch-json",
-        JSON.stringify(tempTargets.map(({ text, voice, output }) => ({ text, voice, output }))),
-      ],
-      {
-        ...getKokoroExecOptions(),
-        timeout: Math.max(Number.isFinite(KOKORO_TIMEOUT_MS) ? KOKORO_TIMEOUT_MS : 30000, targets.length * 30000),
-      }
-    );
-
-    for (const target of tempTargets) {
-      try {
-        await rename(target.output, target.finalOutput);
-      } catch (error) {
-        if (await hasCachedAudio(target.finalOutput)) continue;
-        throw error;
-      }
-    }
-  } catch (error) {
-    await Promise.all(tempTargets.map((target) => unlink(target.output).catch(() => {})));
-    throw error;
-  }
-}
-
-function getKokoroExecOptions() {
-  return {
-    timeout: Number.isFinite(KOKORO_TIMEOUT_MS) ? KOKORO_TIMEOUT_MS : 30000,
-    maxBuffer: 1024 * 1024,
-    env: {
-      ...process.env,
-      PYTORCH_ENABLE_MPS_FALLBACK: process.env.PYTORCH_ENABLE_MPS_FALLBACK ?? "1",
-    },
-  };
 }
 
 async function generateMacSpeech({

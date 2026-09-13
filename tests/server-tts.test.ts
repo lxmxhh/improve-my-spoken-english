@@ -143,3 +143,10 @@ describe("qwen multimodal API (legacy DashScope)", () => {
     );
   });
 });
+
+describe("provider selection", () => {
+  it("falls back to qwen for unknown providers such as the removed kokoro", async () => {
+    const { getTtsProvider } = await loadServerTts({ TTS_PROVIDER: "kokoro" });
+    expect(getTtsProvider()).toBe("qwen");
+  });
+});

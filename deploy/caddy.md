@@ -7,10 +7,10 @@ Use Caddy to expose the Next.js production server over HTTPS so mobile browsers 
 Create an `A` record for your domain:
 
 ```text
-your-domain.com -> 8.148.231.67
+your-domain.com -> 47.236.190.244
 ```
 
-Caddy needs a real domain name for automatic trusted HTTPS certificates. A bare IP address such as `http://8.148.231.67:6688` is not enough for mobile microphone access.
+Caddy needs a real domain name for automatic trusted HTTPS certificates. A bare IP address such as `http://47.236.190.244:6688` is not enough for mobile microphone access.
 
 ## 2. Start the app in production mode
 

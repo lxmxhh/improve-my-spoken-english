@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  generateCachedSpeech,
-  getErrorMessage,
-  getTtsProvider,
-  type GeneratedSpeech,
-} from "@/lib/server-tts";
+import { generateCachedSpeech, getErrorMessage, type GeneratedSpeech } from "@/lib/server-tts";
 
 export const runtime = "nodejs";
 
@@ -24,17 +19,13 @@ export async function POST(request: Request) {
     const speech = await generateCachedSpeech(text, {
       voice,
       qwenVoice: typeof body.qwenVoice === "string" ? body.qwenVoice : undefined,
-      kokoroVoice: typeof body.kokoroVoice === "string" ? body.kokoroVoice : undefined,
     });
     return audioResponse(speech);
   } catch (error) {
     console.error("[TTS] speech generation failed", error);
     return NextResponse.json(
-      {
-        error: getTtsProvider() === "kokoro" ? "Kokoro local TTS failed" : "Failed to generate speech",
-        details: getErrorMessage(error),
-      },
-      { status: getTtsProvider() === "kokoro" ? 503 : 500 }
+      { error: "Failed to generate speech", details: getErrorMessage(error) },
+      { status: 500 }
     );
   }
 }
