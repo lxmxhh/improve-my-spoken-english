@@ -6,15 +6,20 @@ import { promisify } from "node:util";
 import type { Script } from "./types";
 
 const execFileAsync = promisify(execFile);
-const CACHE_DIR = join(process.cwd(), "data", "tts-cache");
+const CACHE_DIR = process.env.TTS_CACHE_DIR ?? join(process.cwd(), "data", "tts-cache");
 const ALLOWED_PROVIDER_NAMES = new Set(["qwen", "macos", "kokoro"]);
 const DEBUG_TTS = process.env.DEBUG_TTS === "1";
 const TTS_PROVIDER = process.env.TTS_PROVIDER ?? "qwen";
+// "multimodal": DashScope Qwen3-TTS (services/aigc/multimodal-generation/generation).
+// "speech-synthesizer": Token Plan / CosyVoice (services/audio/tts/SpeechSynthesizer).
+const QWEN_TTS_API: QwenTtsApi =
+  process.env.QWEN_TTS_API === "speech-synthesizer" ? "speech-synthesizer" : "multimodal";
 const QWEN_TTS_BASE_URL =
   process.env.QWEN_TTS_BASE_URL ?? "https://dashscope.aliyuncs.com/api/v1";
 const QWEN_TTS_MODEL = process.env.QWEN_TTS_MODEL ?? "qwen3-tts-flash";
 const QWEN_TTS_VOICE = process.env.QWEN_TTS_VOICE ?? "Ethan";
 const QWEN_TTS_LANGUAGE = process.env.QWEN_TTS_LANGUAGE ?? "English";
+const QWEN_TTS_FORMAT: AudioFormat = process.env.QWEN_TTS_FORMAT === "mp3" ? "mp3" : "wav";
 const QWEN_TTS_API_KEY =
   process.env.QWEN_TTS_API_KEY ??
   process.env.DASHSCOPE_API_KEY ??
@@ -29,6 +34,18 @@ const KOKORO_SPEED = Number(process.env.KOKORO_SPEED ?? "1");
 const KOKORO_TIMEOUT_MS = Number(process.env.KOKORO_TIMEOUT_MS ?? "30000");
 
 export type TtsProvider = "qwen" | "macos" | "kokoro";
+type QwenTtsApi = "multimodal" | "speech-synthesizer";
+type AudioFormat = "wav" | "mp3";
+
+const CONTENT_TYPES: Record<AudioFormat, string> = {
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+};
+
+export interface GeneratedSpeech {
+  audio: Buffer;
+  contentType: string;
+}
 
 interface SpeechOptions {
   voice?: string;
@@ -48,7 +65,8 @@ interface CacheTarget {
   provider: TtsProvider;
   cacheModel: string;
   cacheVoice: string;
-  wavPath: string;
+  format: AudioFormat;
+  audioPath: string;
   voice: string;
   qwenVoice: string;
   kokoroVoice: string;
@@ -59,42 +77,48 @@ export function getTtsProvider(): TtsProvider {
   return ALLOWED_PROVIDER_NAMES.has(normalized) ? (normalized as TtsProvider) : "qwen";
 }
 
-export async function generateCachedSpeech(text: string, options: SpeechOptions = {}): Promise<Buffer> {
+export async function generateCachedSpeech(
+  text: string,
+  options: SpeechOptions = {}
+): Promise<GeneratedSpeech> {
   const safeText = text.trim().slice(0, 600);
   if (!safeText) throw new Error("Missing text");
 
   const target = getCacheTarget({ text: safeText, ...options });
   await mkdir(CACHE_DIR, { recursive: true });
 
-  const cached = await readCachedAudio(target.wavPath);
-  if (cached) return cached;
+  const cached = await readCachedAudio(target.audioPath);
+  if (cached) return { audio: cached, contentType: CONTENT_TYPES[target.format] };
 
   if (target.provider === "qwen" && QWEN_TTS_API_KEY.trim()) {
     try {
       const audio = await generateQwenSpeech(safeText, target.qwenVoice);
-      await writeFile(target.wavPath, audio);
+      await writeFile(target.audioPath, audio);
       if (DEBUG_TTS) console.log("[TTS] qwen generated", audio.length, "bytes");
-      return audio;
+      return { audio, contentType: CONTENT_TYPES[target.format] };
     } catch (error) {
       console.error("[TTS] Qwen-TTS failed, falling back to macOS", error);
     }
   }
 
+  // Fallback providers always produce wav, regardless of the configured qwen format.
+  const wavPath = target.audioPath.replace(/\.[a-z0-9]+$/, ".wav");
+
   if (target.provider === "kokoro") {
     await generateKokoroSpeech({
       text: safeText,
       voice: target.kokoroVoice,
-      outputPath: target.wavPath,
+      outputPath: wavPath,
     });
-    return readFile(target.wavPath);
+    return { audio: await readFile(wavPath), contentType: CONTENT_TYPES.wav };
   }
 
   await generateMacSpeech({
     text: safeText,
     voice: target.voice,
-    outputPath: target.wavPath,
+    outputPath: wavPath,
   });
-  return readFile(target.wavPath);
+  return { audio: await readFile(wavPath), contentType: CONTENT_TYPES.wav };
 }
 
 export async function prewarmCoachAudioForScript(script: Script): Promise<void> {
@@ -110,8 +134,8 @@ export async function prewarmSpeechTexts(texts: string[]): Promise<void> {
     .filter(Boolean)
     .map((text) => getCacheTarget({ text }))
     .filter((target) => {
-      if (seenPaths.has(target.wavPath)) return false;
-      seenPaths.add(target.wavPath);
+      if (seenPaths.has(target.audioPath)) return false;
+      seenPaths.add(target.audioPath);
       return true;
     });
   await prewarmSpeechTargets(targets);
@@ -122,7 +146,7 @@ async function prewarmSpeechTargets(targets: CacheTarget[]): Promise<void> {
 
   const missing: CacheTarget[] = [];
   for (const target of targets) {
-    if (await hasCachedAudio(target.wavPath)) continue;
+    if (await hasCachedAudio(target.audioPath)) continue;
     missing.push(target);
   }
 
@@ -160,36 +184,40 @@ function getCacheTarget({
       : provider === "kokoro"
         ? `${KOKORO_MODEL}:${KOKORO_LANG}:${Number.isFinite(KOKORO_SPEED) ? KOKORO_SPEED : 1}`
         : "macos-say";
-  const hash = createHash("sha256")
-    .update(`${provider}:${cacheModel}:${cacheVoice}:${safeText}`)
-    .digest("hex")
-    .slice(0, 24);
+  const format: AudioFormat = provider === "qwen" ? QWEN_TTS_FORMAT : "wav";
+  // Keep the legacy hash input for wav so existing cache files stay valid.
+  const hashInput =
+    format === "wav"
+      ? `${provider}:${cacheModel}:${cacheVoice}:${safeText}`
+      : `${provider}:${cacheModel}:${cacheVoice}:${format}:${safeText}`;
+  const hash = createHash("sha256").update(hashInput).digest("hex").slice(0, 24);
 
   return {
     text: safeText,
     provider,
     cacheModel,
     cacheVoice,
-    wavPath: join(CACHE_DIR, `${hash}.wav`),
+    format,
+    audioPath: join(CACHE_DIR, `${hash}.${format}`),
     voice,
     qwenVoice,
     kokoroVoice: sanitizedKokoroVoice,
   };
 }
 
-async function hasCachedAudio(wavPath: string) {
+async function hasCachedAudio(audioPath: string) {
   try {
-    await readFile(wavPath);
+    await readFile(audioPath);
     return true;
   } catch {
     return false;
   }
 }
 
-async function readCachedAudio(wavPath: string): Promise<Buffer | null> {
+async function readCachedAudio(audioPath: string): Promise<Buffer | null> {
   try {
-    const audio = await readFile(wavPath);
-    if (DEBUG_TTS) console.log("[TTS] cache hit", wavPath);
+    const audio = await readFile(audioPath);
+    if (DEBUG_TTS) console.log("[TTS] cache hit", audioPath);
     return audio;
   } catch {
     return null;
@@ -241,8 +269,8 @@ async function generateKokoroSpeechBatch(targets: CacheTarget[]): Promise<void> 
   const tempTargets = targets.map((target, index) => ({
     text: target.text,
     voice: target.kokoroVoice,
-    output: `${target.wavPath}.tmp-${process.pid}-${Date.now()}-${index}.wav`,
-    finalOutput: target.wavPath,
+    output: `${target.audioPath}.tmp-${process.pid}-${Date.now()}-${index}.wav`,
+    finalOutput: target.audioPath,
   }));
 
   try {
@@ -303,21 +331,35 @@ async function generateMacSpeech({
   await unlink(aiffPath).catch(() => {});
 }
 
+function getQwenRequest(text: string, voice: string): { url: string; body: unknown } {
+  if (QWEN_TTS_API === "speech-synthesizer") {
+    return {
+      url: `${QWEN_TTS_BASE_URL}/services/audio/tts/SpeechSynthesizer`,
+      body: {
+        model: QWEN_TTS_MODEL,
+        input: { text, voice, format: QWEN_TTS_FORMAT },
+      },
+    };
+  }
+
+  return {
+    url: `${QWEN_TTS_BASE_URL}/services/aigc/multimodal-generation/generation`,
+    body: {
+      model: QWEN_TTS_MODEL,
+      input: { text, voice, language_type: QWEN_TTS_LANGUAGE },
+    },
+  };
+}
+
 async function generateQwenSpeech(text: string, voice: string): Promise<Buffer> {
-  const response = await fetch(`${QWEN_TTS_BASE_URL}/services/aigc/multimodal-generation/generation`, {
+  const request = getQwenRequest(text, voice);
+  const response = await fetch(request.url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${QWEN_TTS_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: QWEN_TTS_MODEL,
-      input: {
-        text,
-        voice,
-        language_type: QWEN_TTS_LANGUAGE,
-      },
-    }),
+    body: JSON.stringify(request.body),
   });
 
   const result = await response.json().catch(() => null);

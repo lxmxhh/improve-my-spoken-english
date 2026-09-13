@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey, withChatDefaults } from "@/lib/ai";
 import { interpretAnswer, quickVerdict } from "@/lib/answer-check";
 import type { CoachPromptAnchor } from "@/lib/types";
 
@@ -53,11 +53,11 @@ Does the learner's sentence convey the same meaning as the reference? Reply with
           },
         ];
 
-    const completion = await getAiClient().chat.completions.create({
+    const completion = await getAiClient().chat.completions.create(withChatDefaults({
       model: AI_MODEL,
       max_tokens: 20,
       messages,
-    });
+    }));
 
     const answer = completion.choices[0]?.message?.content ?? "";
     const pass = interpretAnswer(answer, { actual, reference, hasAnchor: Boolean(anchor) });

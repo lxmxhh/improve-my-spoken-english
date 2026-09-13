@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey, withChatDefaults } from "@/lib/ai";
 import { ensureAnchors } from "@/lib/anchor";
 import FALLBACK_SCRIPTS from "@/lib/fallback-scripts";
 import { normalizeScript } from "@/lib/script-normalize";
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       throw new Error("AI_API_KEY is not configured");
     }
 
-    const completionPromise = getAiClient().chat.completions.create({
+    const completionPromise = getAiClient().chat.completions.create(withChatDefaults({
       model: AI_MODEL,
       max_tokens: 900,
       response_format: { type: "json_object" },
@@ -68,7 +68,7 @@ Return valid JSON with this exact shape:
 }`,
         },
       ],
-    });
+    }));
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error("generate-script timeout")), GENERATE_TIMEOUT_MS);

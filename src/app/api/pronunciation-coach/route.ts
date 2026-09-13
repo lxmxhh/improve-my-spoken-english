@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey, withChatDefaults } from "@/lib/ai";
 import {
   analyzeConnectedSpeech,
   normalizeConnectedSpeechGuide,
@@ -93,7 +93,7 @@ async function handleFreeExpression(
   }
 
   try {
-    const completion = await getAiClient().chat.completions.create({
+    const completion = await getAiClient().chat.completions.create(withChatDefaults({
       model: AI_MODEL,
       max_tokens: 260,
       response_format: { type: "json_object" },
@@ -127,7 +127,7 @@ Rules:
 - Keep each advice under 22 words.`,
         },
       ],
-    });
+    }));
 
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as unknown;
     if (isCoachFeedback(parsed)) {
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const completion = await getAiClient().chat.completions.create({
+    const completion = await getAiClient().chat.completions.create(withChatDefaults({
       model: AI_MODEL,
       max_tokens: 260,
       response_format: { type: "json_object" },
@@ -240,7 +240,7 @@ Rules:
 - Keep each advice sentence under 22 words.`,
         },
       ],
-    });
+    }));
 
     const raw = completion.choices[0]?.message?.content ?? "";
     const parsed = JSON.parse(raw) as unknown;

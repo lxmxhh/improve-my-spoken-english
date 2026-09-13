@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { generateCachedSpeech, getErrorMessage, getTtsProvider } from "@/lib/server-tts";
+import {
+  generateCachedSpeech,
+  getErrorMessage,
+  getTtsProvider,
+  type GeneratedSpeech,
+} from "@/lib/server-tts";
 
 export const runtime = "nodejs";
 
@@ -16,12 +21,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing text" }, { status: 400 });
     }
 
-    const audio = await generateCachedSpeech(text, {
+    const speech = await generateCachedSpeech(text, {
       voice,
       qwenVoice: typeof body.qwenVoice === "string" ? body.qwenVoice : undefined,
       kokoroVoice: typeof body.kokoroVoice === "string" ? body.kokoroVoice : undefined,
     });
-    return audioResponse(audio);
+    return audioResponse(speech);
   } catch (error) {
     console.error("[TTS] speech generation failed", error);
     return NextResponse.json(
@@ -34,10 +39,10 @@ export async function POST(request: Request) {
   }
 }
 
-function audioResponse(audio: Buffer): NextResponse {
+function audioResponse({ audio, contentType }: GeneratedSpeech): NextResponse {
   return new NextResponse(new Uint8Array(audio), {
     headers: {
-      "Content-Type": "audio/wav",
+      "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AI_MODEL, getAiClient, hasAiApiKey } from "@/lib/ai";
+import { AI_MODEL, getAiClient, hasAiApiKey, withChatDefaults } from "@/lib/ai";
 import type { Script } from "@/lib/types";
 
 function scriptToText(script: Script): string {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const completion = await withTimeout(
-      getAiClient().chat.completions.create({
+      getAiClient().chat.completions.create(withChatDefaults({
         model: AI_MODEL,
         messages: [
           {
@@ -54,7 +54,7 @@ Generate a brief end-of-session summary with:
 Reply in plain text, not JSON. Keep it concise and friendly.`,
           },
         ],
-      }),
+      })),
       SUMMARY_TIMEOUT_MS
     );
 
