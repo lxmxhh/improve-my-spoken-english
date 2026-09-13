@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freeFallbackFeedback } from "@/app/api/pronunciation-coach/route";
+import { freeFallbackFeedback } from "@/lib/coach-feedback";
 
 describe("freeFallbackFeedback", () => {
   it("coaches the learner's own sentence, not a model answer", () => {

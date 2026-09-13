@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeScript } from "@/app/api/generate-script/route";
+import { normalizeScript } from "@/lib/script-normalize";
 import { ensureAnchors } from "@/lib/anchor";
 
 const base = {

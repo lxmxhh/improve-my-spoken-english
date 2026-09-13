@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpretAnswer, quickVerdict, wordOverlap } from "@/app/api/evaluate-line/route";
+import { interpretAnswer, quickVerdict, wordOverlap } from "@/lib/answer-check";
 import type { CoachPromptAnchor } from "@/lib/types";
 
 const anchor: CoachPromptAnchor = {
