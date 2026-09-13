@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Script } from "./types";
@@ -102,15 +102,33 @@ export async function generateCachedSpeech(
   return { audio: await readFile(wavPath), contentType: CONTENT_TYPES.wav };
 }
 
-export async function prewarmCoachAudioForScript(script: Script): Promise<void> {
-  await prewarmSpeechTexts(script.turns
+export function getCoachLines(script: Script): string[] {
+  return script.turns
     .filter((turn) => turn.speaker === "coach")
-    .map((turn) => turn.text));
+    .map((turn) => turn.text.trim())
+    .filter(Boolean);
+}
+
+export async function prewarmCoachAudioForScript(script: Script): Promise<void> {
+  await prewarmSpeechTexts(getCoachLines(script));
+}
+
+/** True when every text already has a cached audio file (no generation needed). */
+export async function hasCachedSpeechTexts(texts: string[]): Promise<boolean> {
+  const targets = dedupeTargets(texts);
+  for (const target of targets) {
+    if (!(await hasCachedAudio(target.audioPath))) return false;
+  }
+  return true;
 }
 
 export async function prewarmSpeechTexts(texts: string[]): Promise<void> {
+  await prewarmSpeechTargets(dedupeTargets(texts));
+}
+
+function dedupeTargets(texts: string[]): CacheTarget[] {
   const seenPaths = new Set<string>();
-  const targets = texts
+  return texts
     .map((text) => text.trim())
     .filter(Boolean)
     .map((text) => getCacheTarget({ text }))
@@ -119,18 +137,20 @@ export async function prewarmSpeechTexts(texts: string[]): Promise<void> {
       seenPaths.add(target.audioPath);
       return true;
     });
-  await prewarmSpeechTargets(targets);
 }
 
-async function prewarmSpeechTargets(targets: CacheTarget[]): Promise<void> {
+async function findMissingTargets(targets: CacheTarget[]): Promise<CacheTarget[]> {
   await mkdir(CACHE_DIR, { recursive: true });
-
   const missing: CacheTarget[] = [];
   for (const target of targets) {
     if (await hasCachedAudio(target.audioPath)) continue;
     missing.push(target);
   }
+  return missing;
+}
 
+async function prewarmSpeechTargets(targets: CacheTarget[]): Promise<void> {
+  const missing = await findMissingTargets(targets);
   if (missing.length === 0) return;
 
   for (const target of missing) {
@@ -172,11 +192,79 @@ function getCacheTarget({
 
 async function hasCachedAudio(audioPath: string) {
   try {
-    await readFile(audioPath);
+    await access(audioPath);
     return true;
   } catch {
     return false;
   }
+}
+
+// ---- Background prewarm job (one at a time, used for bulk pool warmup) ----
+
+export interface PrewarmJobStatus {
+  running: boolean;
+  total: number;
+  done: number;
+  failed: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+}
+
+const PREWARM_CONCURRENCY = Number(process.env.TTS_PREWARM_CONCURRENCY ?? "2");
+
+let prewarmJob: PrewarmJobStatus = {
+  running: false,
+  total: 0,
+  done: 0,
+  failed: 0,
+  startedAt: null,
+  finishedAt: null,
+};
+let prewarmJobPromise: Promise<void> | null = null;
+
+export function getPrewarmJobStatus(): PrewarmJobStatus {
+  return { ...prewarmJob };
+}
+
+export function waitForPrewarmJob(): Promise<void> {
+  return prewarmJobPromise ?? Promise.resolve();
+}
+
+/**
+ * Start generating audio for every uncached text in the background. Returns the job status
+ * immediately; if a job is already running, that job's status is returned unchanged.
+ */
+export function startPrewarmJob(texts: string[]): PrewarmJobStatus {
+  if (prewarmJob.running) return getPrewarmJobStatus();
+
+  prewarmJob = { running: true, total: 0, done: 0, failed: 0, startedAt: Date.now(), finishedAt: null };
+  prewarmJobPromise = runPrewarmJob(dedupeTargets(texts)).finally(() => {
+    prewarmJob = { ...prewarmJob, running: false, finishedAt: Date.now() };
+  });
+  return getPrewarmJobStatus();
+}
+
+async function runPrewarmJob(targets: CacheTarget[]): Promise<void> {
+  const missing = await findMissingTargets(targets);
+  prewarmJob = { ...prewarmJob, total: missing.length };
+  if (missing.length === 0) return;
+
+  const queue = [...missing];
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(PREWARM_CONCURRENCY, queue.length)) },
+    async () => {
+      for (let target = queue.shift(); target; target = queue.shift()) {
+        try {
+          await generateCachedSpeech(target.text, { voice: target.voice, qwenVoice: target.qwenVoice });
+          prewarmJob = { ...prewarmJob, done: prewarmJob.done + 1 };
+        } catch (error) {
+          console.error("[TTS] prewarm job failed for:", target.text.slice(0, 40), getErrorMessage(error));
+          prewarmJob = { ...prewarmJob, failed: prewarmJob.failed + 1 };
+        }
+      }
+    }
+  );
+  await Promise.all(workers);
 }
 
 async function readCachedAudio(audioPath: string): Promise<Buffer | null> {

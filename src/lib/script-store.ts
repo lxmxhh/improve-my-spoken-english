@@ -25,6 +25,8 @@ export interface ScriptRecord {
   key: string;
   source: ScriptSource;
   script: Script;
+  /** True when every coach line already has cached audio (filled in by the API route). */
+  audioReady?: boolean;
 }
 
 const SEED_PATH = process.env.SCRIPT_SEED_PATH ?? join(process.cwd(), "data", "script-seed.json");
@@ -138,10 +140,13 @@ export async function getAllRecords(): Promise<ScriptRecord[]> {
 }
 
 /** Append AI-generated scripts to the runtime pool, deduping against seed + runtime. */
-export async function addGeneratedScripts(category: string, scripts: Script[]): Promise<ScriptRecord[]> {
+export async function addGeneratedScripts(
+  category: string,
+  scripts: Script[]
+): Promise<{ records: ScriptRecord[]; added: Script[] }> {
   const validScripts = scripts.filter((script) => isValidScript(script) && script.category === category);
   const [seed, runtime] = await Promise.all([readSeedPool(), readRuntimePool()]);
-  if (validScripts.length === 0) return getRecords(seed, runtime);
+  if (validScripts.length === 0) return { records: getRecords(seed, runtime), added: [] };
 
   const existing = mergePools(seed, runtime)[category] ?? [];
   const seen = new Set(existing.map(getScriptKey));
@@ -168,7 +173,7 @@ export async function addGeneratedScripts(category: string, scripts: Script[]): 
     [category]: [...(runtime[category] ?? []).filter(isValidScript), ...added],
   };
   await writeRuntimePool(nextRuntime);
-  return getRecords(seed, nextRuntime);
+  return { records: getRecords(seed, nextRuntime), added };
 }
 
 /**

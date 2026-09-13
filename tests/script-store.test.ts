@@ -78,7 +78,8 @@ describe("script-store writes", () => {
     await writeFile(seedPath, JSON.stringify({ "Daily Life": [seedScript] }));
 
     const { addGeneratedScripts, readRuntimePool } = await loadStore();
-    await addGeneratedScripts("Daily Life", [seedScript, makeScript("Evening")]);
+    const { added } = await addGeneratedScripts("Daily Life", [seedScript, makeScript("Evening")]);
+    expect(added.map((s) => s.topic)).toEqual(["Evening"]);
 
     const runtime = await readRuntimePool();
     expect(runtime["Daily Life"]!.map((s) => s.topic)).toEqual(["Evening"]);

@@ -17,6 +17,13 @@ const SOURCE_LABELS: Record<AdminScriptRecord["source"], string> = {
   builtin: "Built-in",
 };
 
+interface PrewarmStatus {
+  running: boolean;
+  total: number;
+  done: number;
+  failed: number;
+}
+
 type SourceFilter = "all" | "seed" | "builtin" | "cached";
 
 interface EditorState {
@@ -107,6 +114,25 @@ export default function AdminPage() {
   const [editor, setEditor] = useState<EditorState>(() => createEditorState());
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [prewarm, setPrewarm] = useState<PrewarmStatus | null>(null);
+
+  const refreshPrewarm = async (): Promise<PrewarmStatus | null> => {
+    const response = await fetch("/api/tts-prewarm");
+    if (!response.ok) return null;
+    const status = await response.json() as PrewarmStatus;
+    setPrewarm(status);
+    return status;
+  };
+
+  const startPoolPrewarm = async () => {
+    const response = await fetch("/api/tts-prewarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "pool" }),
+    });
+    if (response.ok) setPrewarm(await response.json() as PrewarmStatus);
+  };
+
 
   const refreshRecords = async () => {
     setLoading(true);
@@ -125,15 +151,28 @@ export default function AdminPage() {
   useEffect(() => {
     const handle = window.setTimeout(() => {
       void refreshRecords();
+      void refreshPrewarm();
     }, 0);
     return () => window.clearTimeout(handle);
   }, []);
+
+  // Poll job progress while it runs; when it finishes, reload records so audio badges update.
+  useEffect(() => {
+    if (!prewarm?.running) return;
+    const handle = window.setInterval(() => {
+      void refreshPrewarm().then((status) => {
+        if (status && !status.running) void refreshRecords();
+      });
+    }, 3000);
+    return () => window.clearInterval(handle);
+  }, [prewarm?.running]);
 
   const counts = useMemo(() => {
     const seed = records.filter((record) => record.source === "seed").length;
     const cached = records.filter((record) => record.source === "cached").length;
     const builtin = records.filter((record) => record.source === "builtin").length;
-    return { total: records.length, seed, cached, builtin };
+    const audioReady = records.filter((record) => record.audioReady).length;
+    return { total: records.length, seed, cached, builtin, audioReady };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -289,6 +328,17 @@ export default function AdminPage() {
                 </div>
                 <button
                   type="button"
+                  onClick={() => void startPoolPrewarm()}
+                  disabled={prewarm?.running}
+                  title="Generate coach audio for every script that is missing it"
+                  className="h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {prewarm?.running
+                    ? `Prewarming ${prewarm.done + prewarm.failed}/${prewarm.total || "…"}`
+                    : `Prewarm audio (${counts.audioReady}/${counts.total} ready)`}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setEditor(createEditorState());
                     setMessage(null);
@@ -335,6 +385,14 @@ export default function AdminPage() {
                           }`}>
                             {SOURCE_LABELS[record.source]}
                           </span>
+                          {record.audioReady === false && (
+                            <span
+                              className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700"
+                              title="Coach audio not generated yet"
+                            >
+                              No audio
+                            </span>
+                          )}
                         </div>
                         <p className="mt-1 text-xs text-gray-400">
                           {record.script.category} · {record.script.turns.length} turns

@@ -9,7 +9,7 @@ import MicButton from "@/components/MicButton";
 import PromptScaffold from "@/components/PromptScaffold";
 import SessionSummary from "@/components/SessionSummary";
 import SpeedRound from "@/components/SpeedRound";
-import { getBuiltinScripts, getImmediateFileScript, getImmediateScript, getScriptKey, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES, upsertFileCachedScript } from "@/lib/script-pool";
+import { getBuiltinScripts, getImmediateFileScript, getScriptKey, recordScriptPerformance, refillScriptPool, SCRIPT_CATEGORIES, upsertFileCachedScript } from "@/lib/script-pool";
 import { saveSession, computeAndUpdateStreak } from "@/lib/storage";
 import type {
   CapturedAudio,
@@ -345,14 +345,12 @@ export default function SessionPage() {
 
   const loadNextScript = useCallback(() => {
     const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    dispatch({ type: "SCRIPT_LOADED", script: getImmediateScript(category) });
-    void getImmediateFileScript(category)
-      .then((script) => {
-        dispatch({ type: "SCRIPT_LOADED", script });
-      })
-      .catch((error) => {
-        console.warn("[script-pool] file script load failed:", error);
-      });
+    // Wait for the pool (fast, local JSON) instead of showing a builtin script first:
+    // the builtin's coach-voice warmup was always aborted moments later but still cost
+    // a TTS generation on the server. getImmediateFileScript never rejects.
+    void getImmediateFileScript(category).then((script) => {
+      dispatch({ type: "SCRIPT_LOADED", script });
+    });
     setTimeout(() => {
       void refillScriptPool(category);
     }, BACKGROUND_REFILL_DELAY_MS);

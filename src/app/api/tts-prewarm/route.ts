@@ -1,11 +1,34 @@
 import { NextResponse } from "next/server";
-import { getErrorMessage, prewarmSpeechTexts } from "@/lib/server-tts";
+import { getAllRecords } from "@/lib/script-store";
+import {
+  getCoachLines,
+  getErrorMessage,
+  getPrewarmJobStatus,
+  prewarmSpeechTexts,
+  startPrewarmJob,
+} from "@/lib/server-tts";
 
 export const runtime = "nodejs";
 
+/** Status of the background pool-wide prewarm job. */
+export async function GET() {
+  return NextResponse.json(getPrewarmJobStatus());
+}
+
+/**
+ * - `{ texts: string[] }`: synchronously warm a few lines (used by the session page).
+ * - `{ scope: "pool" }`: start a background job over every coach line in seed + runtime pool.
+ */
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({})) as { texts?: unknown };
+    const body = await request.json().catch(() => ({})) as { texts?: unknown; scope?: unknown };
+
+    if (body.scope === "pool") {
+      const records = await getAllRecords();
+      const texts = records.flatMap((record) => getCoachLines(record.script));
+      return NextResponse.json({ ...startPrewarmJob(texts), candidates: texts.length });
+    }
+
     const texts = Array.isArray(body.texts)
       ? body.texts.map((text: unknown) => String(text)).filter((text: string) => text.trim())
       : [];

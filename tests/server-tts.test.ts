@@ -150,3 +150,59 @@ describe("provider selection", () => {
     expect(getTtsProvider()).toBe("qwen");
   });
 });
+
+describe("cache status and background prewarm", () => {
+  const env = { TTS_PROVIDER: "qwen", QWEN_TTS_API_KEY: "k" };
+
+  it("getCoachLines returns trimmed non-empty coach turns in order", async () => {
+    const { getCoachLines } = await loadServerTts(env);
+    expect(
+      getCoachLines({
+        topic: "t",
+        category: "c",
+        turns: [
+          { speaker: "coach", text: " Hi there. " },
+          { speaker: "user", text: "Hello" },
+          { speaker: "coach", text: "" },
+          { speaker: "coach", text: "Bye." },
+        ],
+      })
+    ).toEqual(["Hi there.", "Bye."]);
+  });
+
+  it("hasCachedSpeechTexts is true only when every text is cached", async () => {
+    mockQwenFetch([1]);
+    const { generateCachedSpeech, hasCachedSpeechTexts } = await loadServerTts(env);
+    await generateCachedSpeech("Cached one.");
+
+    expect(await hasCachedSpeechTexts(["Cached one."])).toBe(true);
+    expect(await hasCachedSpeechTexts(["Cached one.", "Not yet."])).toBe(false);
+    expect(await hasCachedSpeechTexts([])).toBe(true);
+  });
+
+  it("startPrewarmJob generates missing texts in the background and reports progress", async () => {
+    const fetchMock = mockQwenFetch([1]);
+    const { generateCachedSpeech, startPrewarmJob, getPrewarmJobStatus, waitForPrewarmJob } =
+      await loadServerTts(env);
+    await generateCachedSpeech("Already there.");
+    fetchMock.mockClear();
+
+    const started = startPrewarmJob(["Already there.", "New A.", "New B.", "New A."]);
+    expect(started).toMatchObject({ running: true, done: 0, failed: 0 });
+
+    await waitForPrewarmJob();
+    const status = getPrewarmJobStatus();
+    expect(status).toMatchObject({ running: false, total: 2, done: 2, failed: 0 });
+    // two generations = two POST calls + two downloads
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("startPrewarmJob refuses to start a second job while one is running", async () => {
+    mockQwenFetch([1]);
+    const { startPrewarmJob, waitForPrewarmJob } = await loadServerTts(env);
+    const first = startPrewarmJob(["One.", "Two."]);
+    const second = startPrewarmJob(["Three."]);
+    expect(second).toEqual(first);
+    await waitForPrewarmJob();
+  });
+});

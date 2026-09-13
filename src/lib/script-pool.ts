@@ -143,6 +143,7 @@ export interface AdminScriptRecord {
   key: string;
   source: ScriptSource;
   script: Script;
+  audioReady?: boolean;
 }
 
 interface ScriptPerformance {
@@ -377,15 +378,25 @@ export async function migrateLocalStorageScriptsToFile(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Choose the next script for a category. Due review scripts win; otherwise prefer scripts
+ * whose coach audio is already cached so the first coach line plays without waiting on TTS.
+ */
+export function pickScriptFromRecords(records: AdminScriptRecord[], category: string): Script {
+  const inCategory = records.filter((record) => record.script.category === category);
+  const candidates = inCategory.map((record) => record.script);
+  const reviewScript = getReviewScript(category, candidates);
+  if (reviewScript) return ensureAnchors(reviewScript);
+
+  const ready = inCategory.filter((record) => record.audioReady).map((record) => record.script);
+  const builtin = BUILTIN_SCRIPTS.filter((script) => script.category === category);
+  const pool = ready.length > 0 ? ready : candidates.length > 0 ? candidates : builtin;
+  return ensureAnchors(randomItem(pool.length > 0 ? pool : BUILTIN_SCRIPTS));
+}
+
 export async function getImmediateFileScript(category: string): Promise<Script> {
   try {
-    const records = await fetchScriptRecords();
-    const candidates = records
-      .filter((record) => record.script.category === category)
-      .map((record) => record.script);
-    const reviewScript = getReviewScript(category, candidates);
-    if (reviewScript) return ensureAnchors(reviewScript);
-    return ensureAnchors(randomItem(candidates.length > 0 ? candidates : BUILTIN_SCRIPTS));
+    return pickScriptFromRecords(await fetchScriptRecords(), category);
   } catch {
     return getImmediateScript(category);
   }
